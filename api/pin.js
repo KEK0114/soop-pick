@@ -8,12 +8,13 @@ import { get } from '@vercel/blob';
 
 export default async function handler(req, res) {
   const id = String(req.query.id || '');
+  const dir = req.query.kind === 'v' ? 'v' : 'p';
   if (!/^[A-Za-z0-9_-]{4,64}$/.test(id)) {
     return res.status(400).json({ error: '이름표가 이상합니다.' });
   }
 
   try {
-    const r = await get(`p/${id}.json`, { access: 'private' });
+    const r = await get(`${dir}/${id}.json`, { access: 'private' });
     if (!r || r.statusCode !== 200) {
       return res.status(404).json({ error: '이 순위를 찾지 못했습니다.' });
     }

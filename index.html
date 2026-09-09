@@ -874,11 +874,20 @@ function paintShare() {
   paintPinInfo();
 
   const live = $('#shlive');
-  live.addEventListener('click', () => {
-    navigator.clipboard.writeText(shareUrl()).then(() => {
-      live.textContent = '복사했습니다';
-      setTimeout(() => { live.textContent = '보는 사람용 주소 복사'; }, 1600);
-    });
+  live.addEventListener('click', async () => {
+    live.disabled = true; live.textContent = '만드는 중…';
+    let msg = '복사하지 못했습니다';
+    try {
+      let url = shareUrl(), short = false;
+      if (SHORTEN) {
+        try { url = await shortenView(); short = true; } catch (e) { /* 긴 주소로 */ }
+      }
+      await navigator.clipboard.writeText(url);
+      msg = short ? '복사했습니다 (짧은 주소)'
+                  : '복사했습니다 (' + fmt(url.length) + '자)';
+    } catch (e) { /* msg 그대로 */ }
+    live.textContent = msg;
+    setTimeout(() => { live.disabled = false; live.textContent = '보는 사람용 주소 복사'; }, 2600);
   });
 
   const cb = $('#pintext');
@@ -1409,16 +1418,33 @@ function refreshPin() {
 
 // 긴 주소를 서버에 맡기고 짧은 이름표를 받아 온다.
 // 실패하면 긴 주소를 그대로 쓴다 — 링크를 못 만드는 일은 없어야 한다.
-async function shorten(pin) {
+async function keep(raw) {
   const r = await fetch('/api/save', {
     method: 'POST',
     headers: { 'content-type': 'text/plain; charset=utf-8' },
-    body: pin.raw,
+    body: raw,
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
   const { id } = await r.json();
   if (!id) throw new Error('이름표를 받지 못했습니다');
-  return location.origin + '/p/' + id;
+  return id;
+}
+
+async function shorten(pin) {
+  return location.origin + '/p/' + await keep(pin.raw);
+}
+
+// 보는 사람용 주소. 담는 것은 글 주소와 설정뿐이라 아주 작다 —
+// 순위는 그 사람 브라우저가 SOOP 에서 그때그때 받아 온다.
+async function shortenView() {
+  const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+  const body = { v: 2, b: STATE.bid, o: STATE.no };
+  if (n > 0) body.n = n;
+  if (SNAP && SNAP.raw) body.s = SNAP.raw;
+  if (ADMIN.ex.size) body.x = [...ADMIN.ex];
+  if (ADMIN.fix.size) body.f = [...ADMIN.fix];
+  if (VIEW === 'card') body.w = 1;
+  return location.origin + '/v/' + await keep(JSON.stringify(body));
 }
 
 const wantText = () => { const c = $('#pintext'); return !c || c.checked; };
@@ -1573,11 +1599,34 @@ function applyReadOnly() {
   // 예전에 만든 '?pin=' 주소도 계속 받아 준다.
   const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
   const slug = (location.pathname.match(/^\/p\/([A-Za-z0-9_-]{4,64})$/) || [])[1];
+  const vslug = (location.pathname.match(/^\/v\/([A-Za-z0-9_-]{4,64})$/) || [])[1];
   const pin = h.get('pin') || q.get('pin');
   PIN = !!(pin || slug);
   // 볼 게 있을 때만 보기 전용으로 잠근다. 빈 화면을 잠가 놓으면 아무것도 못 한다.
-  RO = PIN || (q.get('ro') === '1' && !!(q.get('post') || CFG.defaultPostUrl));
+  RO = PIN || !!vslug || (q.get('ro') === '1' && !!(q.get('post') || CFG.defaultPostUrl));
   applyReadOnly();
+
+  // 짧은 보는 사람용 주소. 설정만 받아 오고 순위는 SOOP 에서 새로 받는다.
+  if (vslug) {
+    fetch('/api/pin?kind=v&id=' + encodeURIComponent(vslug))
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(o => {
+        if (o.n) $('#n').value = o.n;
+        if (o.s) SNAP = readSnap(o.s);
+        (o.x || []).forEach(x => ADMIN.ex.add(x));
+        (o.f || []).forEach(x => ADMIN.fix.add(x));
+        setView(o.w ? 'card' : 'table');
+        paintAdmin();
+        return load(o.b, o.o);
+      })
+      .catch(() => {
+        $('#snapbar').style.display = '';
+        $('#snapbar').className = 'readbox';
+        $('#snapbar').innerHTML = '<b class="warn">이 주소를 찾지 못했습니다.</b> ' +
+          '주소가 맞는지 확인해 주세요.';
+      });
+    return;
+  }
 
   if (PIN) {
     setView((h.get('view') || q.get('view')) === 'card' ? 'card' : 'table');

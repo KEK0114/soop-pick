@@ -26,16 +26,21 @@ export default async function handler(req, res) {
   // 우리 화면이 만든 것인지만 확인한다. 남의 저장소로 쓰이지 않게.
   let obj;
   try { obj = JSON.parse(body); } catch { return res.status(400).json({ error: '읽을 수 없는 내용입니다.' }); }
-  const ok = obj && obj.v === 1
+  const post = obj
     && typeof obj.b === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(obj.b)
-    && /^[0-9]{1,20}$/.test(String(obj.o))
-    && Array.isArray(obj.p) && obj.p.length > 0 && obj.p.length <= 5000;
+    && /^[0-9]{1,20}$/.test(String(obj.o));
+  // v:1 은 고정된 결과(사람 목록까지), v:2 는 보는 사람용(글 주소와 설정만)
+  const ok = post && (
+    (obj.v === 1 && Array.isArray(obj.p) && obj.p.length > 0 && obj.p.length <= 5000)
+    || (obj.v === 2 && !obj.p));
   if (!ok) return res.status(400).json({ error: '이 화면이 만든 결과가 아닙니다.' });
+
+  const dir = obj.v === 2 ? 'v' : 'p';
 
   const id = createHash('sha256').update(body).digest('base64url').slice(0, 10);
 
   try {
-    const blob = await put(`p/${id}.json`, body, {
+    const blob = await put(`${dir}/${id}.json`, body, {
       access: 'private',      // 지원서 전문이 들어간다. 공개 주소를 만들지 않는다.
       addRandomSuffix: false,
       allowOverwrite: true,          // 같은 내용이면 같은 이름이라 덮어써도 같은 것이다
