@@ -322,6 +322,7 @@ let RO = false;
 // 결과가 통째로 주소에 담겨 온 경우. SOOP 를 한 번도 안 부른다.
 let PIN = false, PINAT = null, PINURL = null, PINSHORT = null, PINSEQ = 0;
 let PINSAVED = false;          // 짧은 주소(사이트에 보관)로 열렸는가
+let VSLUG = false;             // 짧은 보는 사람용 주소로 열렸는가
 let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
 // 짧은 주소를 만들어 주는 서버가 붙어 있는가. 저장이 안 되면 긴 주소로 떨어진다.
 const SHORTEN = CFG.shortLinks !== false;
@@ -1081,7 +1082,7 @@ function closeDetail() { $('#ov').classList.remove('on'); }
 
 // ─────────────────────────────────────────────────────────── 주소 = 상태
 function syncUrl() {
-  if (PIN) return;                 // 고정 주소는 손대지 않는다
+  if (PIN || VSLUG) return;        // 짧은 주소는 손대지 않는다. 도로 길어진다.
   const u = new URL(location.href);
   if (STATE.bid) {
     u.searchParams.set('post',
@@ -1608,6 +1609,7 @@ function applyReadOnly() {
 
   // 짧은 보는 사람용 주소. 설정만 받아 오고 순위는 SOOP 에서 새로 받는다.
   if (vslug) {
+    VSLUG = true;
     fetch('/api/pin?kind=v&id=' + encodeURIComponent(vslug))
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(o => {
