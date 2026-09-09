@@ -38,6 +38,7 @@ window.PICK_CONFIG = {
     bestBadge: true,           // 베스트 댓글 표시
     photos: true,              // 댓글에 붙은 이미지
     search: true,              // 찾기 칸
+    excel: true,               // [엑셀로 내려받기] 버튼
     copyButton: true,          // 뽑힌 사람 복사
   },
 

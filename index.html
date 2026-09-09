@@ -130,6 +130,7 @@
   .cutnote{color:var(--mut);font-size:12.5px;margin:14px 0 4px;text-align:center;
     border-top:1px dashed var(--bd);padding-top:11px}
   .cutnote b{color:var(--ok)}
+  .now{color:var(--dim);font-size:11px;font-weight:400;margin-left:5px;white-space:nowrap}
 
   /* 보기 바꾸기 */
   .views{display:flex;gap:0;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
@@ -243,6 +244,7 @@
       <button id="todo">아직 확인 안 한 것만</button>
       <input type="text" id="q" placeholder="닉네임 · 아이디 · 내용으로 찾기" style="flex:1;min-width:180px">
       <button id="copy">뽑힌 사람 복사</button>
+      <button id="xls" title="지금 순위를 그대로 표 파일로 내려받습니다. 엑셀에서 바로 열립니다.">엑셀로 내려받기</button>
       <button id="reload">새로고침</button>
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
       <span class="n" id="count"></span>
@@ -278,7 +280,8 @@ const CFG = Object.assign({
   defaultPostUrl: '', colors: {}, show: {}, footer: [], apiBase: null,
 }, window.PICK_CONFIG || {});
 CFG.show = Object.assign({ followers: true, checked: true, bestBadge: true,
-  photos: true, postBody: true, search: true, copyButton: true }, CFG.show || {});
+  photos: true, postBody: true, search: true, copyButton: true,
+  excel: true }, CFG.show || {});
 // 예전 이름도 받아 준다
 if (CFG.show.streamerHeart !== undefined) CFG.show.checked = CFG.show.streamerHeart;
 
@@ -629,10 +632,26 @@ function render() {
 // 관리자가 고른 것을 반영한 최종 줄 세우기.
 // 제외한 사람은 빼고, 확정한 사람은 맨 위로 올린다. 나머지는 좋아요 순 그대로.
 function ranked() {
-  const keep = STATE.people.filter(c => !ADMIN.ex.has(c.userId));
+  let list = STATE.people;
+  if (SNAP) {
+    // 마감 뒤에 달린 댓글은 지원으로 치지 않는다. 그리고 좋아요를 **마감 당시
+    // 값으로 되돌려** 다시 세운다. 이걸 안 하면 마감은 이름뿐인 버튼이 된다.
+    list = list
+      .filter(c => SNAP.likes[c.userId] != null)
+      .map(c => ({ ...c, likeCnt: SNAP.likes[c.userId], nowCnt: c.likeCnt || 0 }))
+      .sort((a, b) => b.likeCnt - a.likeCnt ||
+                      String(a.regDate).localeCompare(String(b.regDate)));
+  }
+  const keep = list.filter(c => !ADMIN.ex.has(c.userId));
   const fix = keep.filter(c => ADMIN.fix.has(c.userId));
   const rest = keep.filter(c => !ADMIN.fix.has(c.userId));
   return fix.concat(rest);
+}
+
+// 마감한 순위에서, 그 뒤로 좋아요가 바뀌었으면 지금 값도 같이 적는다.
+function nowTag(c) {
+  if (c.nowCnt == null || c.nowCnt === c.likeCnt) return '';
+  return `<span class="now">지금 ${fmt(c.nowCnt)}</span>`;
 }
 
 function paintList() {
@@ -704,7 +723,7 @@ function paintList() {
           ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
         </div>
         <div class="nums">
-          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span></span>
+          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span>${nowTag(c)}</span>
           ${CFG.show.followers ? `<span class="fan" data-fan="${esc(c.userId)}">…</span>` : ''}
           <span>${esc((c.regDate || '').slice(5, 16))}</span>
         </div>
@@ -877,7 +896,7 @@ function paintTable(people, n, hit) {
          target="_blank" rel="noopener" data-stop="1"
          title="${esc(c.userNick || '')} 님의 방송국 열기">방송국 ↗</a></td>
       <td class="idc hidesm">${esc(c.userId || '')}</td>
-      <td class="r lk">${fmt(c.likeCnt)}</td>
+      <td class="r lk">${fmt(c.likeCnt)}${nowTag(c)}</td>
       ${CFG.show.followers
         ? `<td class="r hidesm" data-fan="${esc(c.userId)}" style="color:var(--mut)">…</td>` : ''}
       ${anyTodo ? `<td class="hidesm">${isChecked(c) ? ''
@@ -925,7 +944,7 @@ function openDetail(userId) {
           <span class="idc" style="font-size:12px;color:var(--dim);font-weight:400">
             ${esc(c.userId || '')}</span></h3>
         <div class="nums" style="margin-top:2px">
-          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span></span>
+          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span>${nowTag(c)}</span>
           <span>${rank}위</span>
           ${CFG.show.followers ? `<span>팔로워 ${fan == null ? '—' : fmt(fan)}</span>` : ''}
           <span>${esc((c.regDate || '').slice(0, 16))}</span>
@@ -987,6 +1006,67 @@ function syncUrl() {
   history.replaceState(null, '', u);
 }
 
+// ─────────────────────────────────────────────────────────── 엑셀로 내려받기
+// 엑셀은 CSV 를 UTF-8 로 안 읽는다. 앞에 BOM 을 붙여야 한글이 안 깨진다.
+// 쉼표·따옴표·줄바꿈이 든 칸은 따옴표로 감싸고 따옴표는 두 번 쓴다.
+const CRLF = String.fromCharCode(13, 10);
+const NL   = String.fromCharCode(10);
+const BOM  = String.fromCharCode(0xFEFF);
+const csvCell = (v) => {
+  const t = (v == null ? '' : String(v));
+  const bad = t.indexOf(',') >= 0 || t.indexOf('"') >= 0 ||
+              t.indexOf(NL) >= 0 || t.indexOf(String.fromCharCode(13)) >= 0;
+  return bad ? '"' + t.replace(/"/g, '""') + '"' : t;
+};
+
+function buildCsv() {
+  const people = ranked();
+  const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+  const head = ['순위', '뽑힘', '닉네임', '아이디', '좋아요'];
+  if (SNAP) head.push('지금 좋아요');
+  if (CFG.show.followers) head.push('팔로워');
+  head.push('스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소');
+
+  const rows = people.map((c, i) => {
+    const f = STATE.fans[c.userId] || {};
+    const r = [i + 1, (n > 0 && i < n) ? 'O' : '', c.userNick || '', c.userId || '', c.likeCnt || 0];
+    if (SNAP) r.push(c.nowCnt == null ? c.likeCnt || 0 : c.nowCnt);
+    if (CFG.show.followers) r.push(f.fan == null ? '' : f.fan);
+    r.push(isChecked(c) ? 'O' : '',
+           [f.partner ? '파트너 BJ' : '', f.best ? '베스트 BJ' : ''].filter(Boolean).join(' '),
+           ADMIN.fix.has(c.userId) ? 'O' : '',
+           c.regDate || '',
+           String(c.comment || '').split(String.fromCharCode(13)).join(''),
+           (c.photo && c.photo.url) || '',
+           STATION_URL(c.userId));
+    return r;
+  });
+
+  // 맨 아래에 언제 기준인지 남긴다. 파일만 따로 돌아다녀도 알 수 있어야 한다.
+  const foot = [[], ['기준',
+    SNAP ? SNAP.at.toLocaleString('ko-KR') + ' 로 마감한 순위'
+         : (STATE.when ? STATE.when.toLocaleString('ko-KR') + ' 에 받아 온 지금 순위' : '')],
+    ['게시글', `https://www.sooplive.com/station/${STATE.bid}/post/${STATE.no}`]];
+  if (ADMIN.ex.size) foot.push(['제외한 사람', ADMIN.ex.size + '명']);
+
+  return [head].concat(rows, foot).map(r => r.map(csvCell).join(',')).join(CRLF);
+}
+
+function downloadCsv() {
+  if (!STATE.people.length) return;
+  const stamp = (SNAP ? SNAP.at : new Date());
+  const pad = (x) => String(x).padStart(2, '0');
+  const name = `좋아요순위_${STATE.bid}_${STATE.no}_` +
+    `${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}` +
+    `_${pad(stamp.getHours())}${pad(stamp.getMinutes())}.csv`;
+  const blob = new Blob([BOM + buildCsv()], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
 // 남에게 줄 주소. 관리자 모드는 빼고, 뽑을 인원은 지금 값 그대로 못 박는다.
 function shareUrl() {
   const u = new URL(location.href);
@@ -1038,6 +1118,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft')  { const b = $('#dprev'); if (b && !b.disabled) b.click(); }
 });
 
+$('#xls').addEventListener('click', downloadCsv);
 $('#go').addEventListener('click', start);
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
 $('#reload').addEventListener('click', () => {
@@ -1074,6 +1155,7 @@ function applyConfig() {
     document.querySelector('.foot').innerHTML = CFG.footer.join('<br>');
   if (!CFG.show.search) $('#q').style.display = 'none';
   if (!CFG.show.copyButton) $('#copy').style.display = 'none';
+  if (CFG.show.excel === false) $('#xls').style.display = 'none';
   if (CFG.defaultPickCount) $('#n').value = CFG.defaultPickCount;
   if (CFG.defaultPostUrl) $('#url').value = CFG.defaultPostUrl;
 }
