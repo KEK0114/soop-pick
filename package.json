@@ -1,0 +1,9 @@
+{
+  "name": "soop-pick",
+  "private": true,
+  "type": "module",
+  "description": "SOOP 게시글 댓글을 좋아요 순으로 줄 세우는 화면. 화면은 index.html 하나이고, api/ 는 짧은 주소를 만들 때만 씁니다.",
+  "dependencies": {
+    "@vercel/blob": "^2.8.0"
+  }
+}
