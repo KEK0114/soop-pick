@@ -851,7 +851,7 @@ function paintShare() {
        <button id="shlive" class="primary">보는 사람용 주소 복사</button>
        <button id="shpin" class="primary">완전 고정 주소 복사</button>
        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-         <input type="checkbox" id="pintext" checked style="margin:0"> 지원서 내용도 담기
+         <input type="checkbox" id="pintext" checked style="margin:0"> 지원서 내용·사진도 담기
        </label>
        <span id="pinlen" style="color:var(--dim)"></span>
        <span id="pinsave" style="color:var(--dim)"></span>
@@ -863,7 +863,7 @@ function paintShare() {
      · <b>완전 고정</b> — 지금 이 화면을 <b>통째로 굳혀서</b> 줍니다.
        게시글이 지워져도 그대로이고 무슨 수를 써도 안 바뀝니다.
        주소가 긴 이유는 <b>지원서 내용이 다 들어가서</b>입니다 —
-       순위만 보여 줄 거면 <b>지원서 내용도 담기</b> 를 끄세요.`;
+       순위만 보여 줄 거면 <b>지원서 내용·사진도 담기</b> 를 끄세요.`;
   paintPinInfo();
 
   const live = $('#shlive');
@@ -1332,7 +1332,7 @@ async function makePin(withText) {
       if (isChecked(c)) r.c = 1;
       if (c.regDate) r.d = c.regDate;
       if (withText && c.comment) r.t = c.comment;
-      if (c.photo && c.photo.url) {
+      if (withText && c.photo && c.photo.url) {
         const u = c.photo.url;
         r.h = u.startsWith(SHOT) ? u.slice(SHOT.length) : ('=' + u);
       }
