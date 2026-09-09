@@ -1257,6 +1257,10 @@ function downloadXlsx() {
 // 그 주소로 들어오면 SOOP 를 한 번도 부르지 않는다 — 게시글이 지워져도,
 // SOOP 가 API 를 바꿔도 그 화면은 그대로다. 대신 주소가 길다.
 
+// SOOP 프로필 사진 주소는 아이디에서 그대로 나온다 — 담지 않고 되살린다.
+const PROFILE = (id) =>
+  'https://profile.img.sooplive.com/LOGO/' + id.slice(0, 2) + '/' + id + '/' + id + '.jpg';
+
 const B64U = {
   enc(bytes) {
     let s = '';
@@ -1302,14 +1306,17 @@ async function makePin() {
       if (c.regDate) r.d = c.regDate;
       if (c.comment) r.t = c.comment;
       if (c.photo && c.photo.url) r.h = c.photo.url;
-      if (c.profileImage) r.a = c.profileImage;
+      if (c.profileImage && c.profileImage !== PROFILE(c.userId)) r.a = c.profileImage;
       return r;
     }),
   };
   const out = await squeeze(JSON.stringify(obj));
+  // '#' 뒤는 서버로 전송되지 않는다. 지원서 전문이 남의 서버 기록에 남지 않고,
+  // 주소가 길다고 거부당하는 일도 없다.
   const u = new URL(location.href);
-  for (const k of ['post', 'snap', 'n', 'ex', 'fix', 'admin', 'ro']) u.searchParams.delete(k);
-  u.searchParams.set('pin', (out.z ? '1' : '0') + B64U.enc(out.b));
+  u.search = '';
+  u.hash = 'pin=' + (out.z ? '1' : '0') + B64U.enc(out.b) +
+           (VIEW === 'card' ? '&view=card' : '');
   return u.toString();
 }
 
@@ -1322,7 +1329,7 @@ async function loadPin(str) {
       userId: r.i, userNick: r.k || '', likeCnt: r.l || 0,
       nowCnt: r.w == null ? null : r.w, bjlike: r.c ? 1 : 0,
       regDate: r.d || '', comment: r.t || '',
-      photo: r.h ? { url: r.h } : null, profileImage: r.a || '',
+      photo: r.h ? { url: r.h } : null, profileImage: r.a || PROFILE(r.i),
     };
   });
   PINAT = new Date((o.at || 0) * 1000);
@@ -1469,14 +1476,16 @@ function applyReadOnly() {
   if (q.get('view') === 'card') VIEW = 'card';
   if (q.get('snap')) SNAP = readSnap(q.get('snap'));
   ADMIN.on = q.get('admin') === '1';
-  const pin = q.get('pin');
+  // 고정 주소는 '#pin=' 에 담긴다. 예전에 만든 '?pin=' 주소도 받아 준다.
+  const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const pin = h.get('pin') || q.get('pin');
   PIN = !!pin;
   // 볼 게 있을 때만 보기 전용으로 잠근다. 빈 화면을 잠가 놓으면 아무것도 못 한다.
   RO = PIN || (q.get('ro') === '1' && !!(q.get('post') || CFG.defaultPostUrl));
   applyReadOnly();
 
   if (PIN) {
-    setView(q.get('view') === 'card' ? 'card' : 'table');
+    setView((h.get('view') || q.get('view')) === 'card' ? 'card' : 'table');
     loadPin(pin).then(() => {
       render(); paintSnap(); paintAdmin();
     }).catch(() => {
