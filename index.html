@@ -121,6 +121,8 @@
     padding:11px 13px;margin-top:11px;font-size:12.5px;color:#bcd6f5;line-height:1.8}
   .readbox b{color:#e6edf5}
   .readbox .warn{color:#f0c674}
+  .readbox.soft{background:#171c24;border-color:var(--bd);color:var(--mut)}
+  .readbox.soft b{color:#cbd6e4}
   .readbox button{padding:3px 10px;font-size:11.5px;margin-left:6px}
   .chip.pass{background:#2a1d3a;color:#c9a6e8;border:1px solid #4b3567}
   .tie{background:#2e2718;border:1px solid #5c5027;color:#e8cd88;border-radius:8px;
@@ -210,7 +212,8 @@
 <div class="wrap">
 
   <h1><span class="d"></span>좋아요 순위</h1>
-  <p class="sub">SOOP 방송국 게시글에 달린 <b>댓글을 좋아요 순으로</b> 줄 세웁니다. 뽑을 인원을 넣으면 커트라인을 그어 줍니다.</p>
+  <p class="sub">SOOP 방송국 게시글에 달린 <b>댓글을 좋아요 순으로</b> 줄 세웁니다. 뽑을 인원을 넣으면 커트라인을 그어 주고,
+    모집이 끝나면 <b>그 순간으로 마감</b>해 순위를 굳힐 수 있습니다.</p>
 
   <div class="card">
     <div class="row">
@@ -241,7 +244,7 @@
       <input type="text" id="q" placeholder="닉네임 · 아이디 · 내용으로 찾기" style="flex:1;min-width:180px">
       <button id="copy">뽑힌 사람 복사</button>
       <button id="reload">새로고침</button>
-      <button id="freeze">이 순간으로 고정</button>
+      <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
       <span class="n" id="count"></span>
     </div>
     <div id="list"></div>
@@ -746,30 +749,41 @@ function paintList() {
 function paintSnap() {
   const bar = $('#snapbar');
   const btn = $('#freeze');
+  btn.title = '';
   if (!SNAP) {
-    bar.style.display = 'none';
-    btn.textContent = '이 순간으로 고정';
+    btn.textContent = '지금으로 마감';
+    btn.title = '모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.';
     btn.classList.remove('primary');
+    // 마감 버튼이 왜 있는지는 누르기 **전에** 알아야 한다.
+    if (!STATE.people.length) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    bar.className = 'readbox soft';
+    bar.innerHTML =
+      `⏱ 지금은 <b>좋아요가 바뀔 때마다 순위도 같이 움직이는 상태</b>입니다.
+       모집이 끝났으면 <b>지금으로 마감</b>을 누르세요 —
+       그 순간의 좋아요로 순위가 굳고, 뒤에 달린 댓글과 바뀐 좋아요는 순위를 안 흔듭니다.
+       다시 풀 수도 있습니다.`;
     return;
   }
+  bar.className = 'readbox';
   const after = STATE.people.filter(c => SNAP.likes[c.userId] == null).length;
   const moved = STATE.people.filter(c => SNAP.likes[c.userId] != null &&
                                     (c.likeCnt || 0) !== SNAP.likes[c.userId]).length;
   bar.style.display = '';
   bar.innerHTML =
-    `🔒 <b>${esc(SNAP.at.toLocaleString('ko-KR'))} 기준으로 고정된 순위</b>입니다.
+    `🔒 <b>${esc(SNAP.at.toLocaleString('ko-KR'))} 로 마감한 순위</b>입니다.
      좋아요가 그 뒤로 바뀌어도 순위는 안 움직입니다.<br>` +
     (after ? `그 뒤에 달린 댓글 <b>${fmt(after)}개</b>는 뺐습니다. ` : '') +
     (moved ? `<b>${fmt(moved)}명</b>은 그 뒤로 좋아요가 바뀌었습니다(옆에 '지금 ○' 로 적었습니다).`
-           : '고정한 뒤로 바뀐 사람은 없습니다.') +
-    `<div class="warn" style="margin-top:7px">이 고정은 <b>지금 이 주소 안에</b> 들어 있습니다.
+           : '마감한 뒤로 바뀐 사람은 없습니다.') +
+    `<div class="warn" style="margin-top:7px">이 마감 결과는 <b>지금 이 주소 안에</b> 들어 있습니다.
        어디에도 저장되지 않으므로 <b>창을 닫으면 사라집니다.</b>
        나중에 다시 보거나 남에게 줄 거면 아래 버튼으로 주소를 복사해 두세요.</div>` +
     `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
        <button id="snapshare" class="primary">이 순위 그대로 주소 복사</button>
-       <button id="snapoff">고정 풀기</button>
+       <button id="snapoff">마감 풀기</button>
      </div>`;
-  btn.textContent = '고정됨';
+  btn.textContent = '마감됨';
   btn.classList.add('primary');
   $('#snapshare').addEventListener('click', () => {
     const b = $('#snapshare');
@@ -995,8 +1009,8 @@ function setView(v) {
 }
 $('#freeze').addEventListener('click', () => {
   if (!STATE.people.length) return;
-  if (SNAP) {   // 이미 고정돼 있으면 다시 누르면 '지금' 으로 다시 찍는다
-    if (!confirm('이미 고정돼 있습니다. 지금 값으로 다시 찍을까요?')) return;
+  if (SNAP) {   // 이미 마감돼 있으면 다시 누르면 '지금' 으로 다시 찍는다
+    if (!confirm('이미 마감했습니다. 지금 값으로 다시 마감할까요?')) return;
   }
   SNAP = readSnap(makeSnap(STATE.people));
   syncUrl(); render(); paintSnap(); paintAdmin();
@@ -1031,7 +1045,7 @@ $('#copy').addEventListener('click', () => {
   if (!list.length) return;
   const text = list.map((c, i) =>
     `${i + 1}. ${c.userNick} (${c.userId}) — 좋아요 ${likesOf(c)}`).join('\n')
-    + (SNAP ? `\n\n(${SNAP.at.toLocaleString('ko-KR')} 기준으로 고정된 순위)` : '');
+    + (SNAP ? `\n\n(${SNAP.at.toLocaleString('ko-KR')} 로 마감한 순위)` : '');
   navigator.clipboard.writeText(text).then(() => {
     const b = $('#copy'); b.textContent = '복사했습니다';
     setTimeout(() => { b.textContent = '뽑힌 사람 복사'; }, 1500);
