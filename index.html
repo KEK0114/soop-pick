@@ -322,8 +322,8 @@ let RO = false;
 // 결과가 통째로 주소에 담겨 온 경우. SOOP 를 한 번도 안 부른다.
 let PIN = false, PINAT = null, PINURL = null, PINSHORT = null, PINSEQ = 0;
 let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
-// 짧은 주소를 만들어 주는 서버가 붙어 있는가. 없으면 긴 주소를 그대로 쓴다.
-const SHORTEN = !!(CFG.blobBase);
+// 짧은 주소를 만들어 주는 서버가 붙어 있는가. 저장이 안 되면 긴 주소로 떨어진다.
+const SHORTEN = CFG.shortLinks !== false;
 
 function say(text, kind) {
   const m = $('#msg');
@@ -1362,7 +1362,7 @@ async function makePin(withText) {
 }
 
 async function fetchPin(id) {
-  const r = await fetch(CFG.blobBase.replace(/\/$/, '') + '/p/' + id + '.json');
+  const r = await fetch('/api/pin?id=' + encodeURIComponent(id));
   if (!r.ok) throw new Error('없는 주소입니다 (' + r.status + ')');
   return usePin(await r.json());
 }

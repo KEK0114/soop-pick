@@ -36,13 +36,13 @@ export default async function handler(req, res) {
 
   try {
     const blob = await put(`p/${id}.json`, body, {
-      access: 'public',
+      access: 'private',      // 지원서 전문이 들어간다. 공개 주소를 만들지 않는다.
       addRandomSuffix: false,
       allowOverwrite: true,          // 같은 내용이면 같은 이름이라 덮어써도 같은 것이다
       contentType: 'application/json; charset=utf-8',
       cacheControlMaxAge: 31536000,  // 한 번 만든 결과는 안 바뀐다. 1년 캐시.
     });
-    return res.status(200).json({ id, url: blob.url });
+    return res.status(200).json({ id });
   } catch (e) {
     return res.status(500).json({ error: '저장하지 못했습니다: ' + (e && e.message) });
   }
