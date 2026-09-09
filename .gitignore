@@ -1,0 +1,7 @@
+# 이 저장소에는 화면 파일 세 개만 들어갑니다. 그 밖엔 아무것도 안 올립니다.
+.DS_Store
+Thumbs.db
+desktop.ini
+.vercel/
+node_modules/
+*.log

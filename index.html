@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>좋아요 순위 — SOOP 게시글 지원자 줄 세우기</title>
+<script src="config.js"></script>
+<meta name="description" content="SOOP 방송국 게시글의 댓글을 좋아요 순으로 줄 세워 보여줍니다. 커트라인까지.">
+<style>
+  /* 서버가 없다. 이 파일 하나가 전부다 — 보는 사람 브라우저가 SOOP 를 직접 부른다.
+     SOOP API 가 CORS 를 열어 두고 있어서 가능하다(실측). 막히면 API_* 만
+     중계 주소로 바꾸면 된다. */
+  :root{
+    --bg:#0e1116; --panel:#161b23; --panel2:#1d232d; --bd:#2a323e;
+    --tx:#e6edf5; --dim:#8b96a5; --mut:#aab4c2;
+    --acc:#4c8dff; --ok:#3fb950; --warn:#d9a441; --bad:#f0616d; --like:#ff6b8a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    -webkit-text-size-adjust:100%}
+  a{color:var(--acc)}
+  .wrap{max-width:900px;margin:0 auto;padding:18px 14px 60px}
+
+  h1{font-size:18px;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+  h1 .d{width:9px;height:9px;border-radius:50%;background:var(--acc);flex:none}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;
+    padding:14px;margin-bottom:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,button{font:inherit}
+  input[type=text],input[type=number]{padding:10px 12px;background:var(--panel2);
+    border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:13px}
+  input[type=text]{flex:1;min-width:220px}
+  input[type=number]{width:88px}
+  input:focus{outline:none;border-color:var(--acc)}
+  button{padding:10px 15px;border:1px solid var(--bd);background:var(--panel2);
+    color:var(--tx);border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;
+    white-space:nowrap}
+  button:hover{background:#28303c}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.5;cursor:default}
+  .lbl{color:var(--dim);font-size:12px;margin-right:-2px}
+
+  .hint{color:var(--dim);font-size:12.5px;line-height:1.75;margin-top:10px}
+  .hint code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
+
+  .msg{margin-top:12px;padding:11px 13px;border-radius:8px;font-size:13px;display:none}
+  .msg.show{display:block}
+  .msg.e{background:#3a1b1f;border:1px solid #7d2d36;color:#ffb3ba}
+  .msg.i{background:#16283d;border:1px solid #2c5480;color:#a9cdf5}
+
+  /* 글 머리 */
+  .post h2{font-size:15.5px;margin:0 0 6px;line-height:1.5}
+  .meta{color:var(--dim);font-size:12.5px;display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center}
+  .meta b{color:var(--mut)}
+  .body{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);
+    color:var(--mut);font-size:13px;white-space:pre-wrap;word-break:break-word;
+    max-height:120px;overflow:hidden;position:relative}
+  .body.open{max-height:none}
+  .body:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;
+    height:44px;background:linear-gradient(transparent,var(--panel))}
+  .meta a.open{background:var(--panel2);border:1px solid var(--bd);border-radius:6px;
+    padding:3px 10px;font-weight:700;text-decoration:none}
+  .meta a.open:hover{background:#28303c}
+
+  /* 순위 */
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .tools .n{color:var(--dim);font-size:12.5px}
+  .item{display:flex;gap:11px;padding:11px 12px;border:1px solid var(--bd);
+    border-radius:10px;background:var(--panel);margin-bottom:7px;align-items:flex-start}
+  .item.in{border-color:#2f5d3a;background:#141d18}
+  .rank{width:30px;flex:none;text-align:right;font-weight:800;font-size:15px;
+    color:var(--dim);font-variant-numeric:tabular-nums;padding-top:5px}
+  .item.in .rank{color:var(--ok)}
+  .pic{width:38px;height:38px;flex:none;border-radius:50%;background:var(--panel2);
+    object-fit:cover}
+  .who{flex:1;min-width:0}
+  .nm{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+  .nm b{font-size:14.5px}
+  .nm .id{color:var(--dim);font-size:12px}
+  a.sta{color:inherit;text-decoration:none}
+  a.sta:hover{color:var(--acc);text-decoration:underline}
+  .tbl a.sta{color:var(--dim);font-size:12px;white-space:nowrap}
+  .tbl a.sta:hover{color:var(--acc)}
+  .nums{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;margin-top:3px;
+    font-size:12.5px;color:var(--dim)}
+  .nums .like{color:var(--like);font-weight:800;font-size:14px}
+  .nums .fan{color:var(--mut)}
+  .chip{font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap}
+  .chip.todo{background:#3a2e12;color:#e8b84b;border:1px solid #6d5620}
+  .chip.done{background:#1b2a20;color:#79b58c;border:1px solid #2f5540}
+  .chip.best{background:#2c2718;color:#e3c169;border:1px solid #5c5027}
+  .chip.pic{background:#1b2a33;color:#8fc6e0;border:1px solid #2e4d5e}
+  /* 지원서와 사진을 **가로로** 놓는다. 세로로 쌓으면 사진을 키울수록
+     글이 아래로 밀려 한 사람이 화면을 통째로 먹는다. 나란히 두면
+     사진을 크게 해도 카드 높이가 안 늘어난다. */
+  .appl{margin-top:8px;padding-top:9px;border-top:1px solid var(--bd);
+    display:flex;gap:14px;align-items:flex-start}
+  .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.75;color:var(--mut);
+    white-space:pre-wrap;word-break:break-word}
+  .shot{flex:none;width:320px;max-width:42%}
+  .shot img{width:100%;max-height:260px;object-fit:contain;object-position:top left;
+    border-radius:8px;border:1px solid var(--bd);display:block;background:#0b0e13}
+  .shot .zoom{display:block;margin-top:4px;font-size:11.5px;color:var(--dim)}
+  /* 좁은 화면에서는 위아래로. 대신 사진을 꽉 채운다 */
+  @media (max-width:720px){
+    .appl{display:block}
+    .shot{width:auto;max-width:none;margin-top:10px}
+    .shot img{max-height:340px;object-position:top center}
+  }
+
+  /* 커트라인 */
+  .cut{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:var(--ok);
+    font-size:12.5px;font-weight:700}
+  .cut::before,.cut::after{content:"";height:1px;background:var(--ok);opacity:.5;flex:1}
+  .readbox{background:#16283d;border:1px solid #2c5480;border-radius:10px;
+    padding:11px 13px;margin-top:11px;font-size:12.5px;color:#bcd6f5;line-height:1.8}
+  .readbox b{color:#e6edf5}
+  .readbox .warn{color:#f0c674}
+  .readbox button{padding:3px 10px;font-size:11.5px;margin-left:6px}
+  .chip.pass{background:#2a1d3a;color:#c9a6e8;border:1px solid #4b3567}
+  .tie{background:#2e2718;border:1px solid #5c5027;color:#e8cd88;border-radius:8px;
+    padding:10px 12px;font-size:12.5px;margin:10px 0}
+
+  /* 보기 바꾸기 */
+  .views{display:flex;gap:0;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+  .views button{border:none;border-radius:0;padding:8px 14px;font-size:12.5px;
+    background:var(--panel2)}
+  .views button.on{background:var(--acc);color:#fff}
+
+  /* 전체 종합표 */
+  .tbl{width:100%;border-collapse:collapse;font-size:13px;
+    background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+  .tbl th{background:var(--panel2);color:var(--dim);font-size:11.5px;font-weight:700;
+    text-align:left;padding:9px 10px;white-space:nowrap;border-bottom:1px solid var(--bd)}
+  .tbl td{padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:middle}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tbody tr{cursor:pointer}
+  .tbl tbody tr:hover{background:#1c232e}
+  .tbl tr.in{background:#141d18}
+  .tbl tr.in:hover{background:#18261d}
+  .tbl tr.fixed{background:#131c27}
+  .tbl .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tbl .rk{font-weight:800;color:var(--dim);width:44px}
+  .tbl tr.in .rk{color:var(--ok)}
+  .tbl tr.fixed .rk{color:var(--acc)}
+  .tbl .who2{display:flex;align-items:center;gap:8px;min-width:0}
+  .tbl .who2 img{width:26px;height:26px;border-radius:50%;flex:none;background:var(--panel2)}
+  .tbl .who2 b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tbl .lk{color:var(--like);font-weight:800}
+  .tbl .idc{color:var(--dim);font-size:11.5px}
+  .tbl .peek{color:var(--mut);font-size:12px;max-width:280px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .cutrow td{background:#12261a !important;color:var(--ok);font-weight:700;
+    font-size:12px;text-align:center;padding:7px}
+  .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  @media (max-width:640px){ .tbl .hidesm{display:none} }
+
+  /* 지원서 상세 */
+  .ov{position:fixed;inset:0;background:rgba(4,7,12,.72);display:none;
+    align-items:flex-start;justify-content:center;padding:24px 14px;z-index:50;
+    overflow-y:auto}
+  .ov.on{display:flex}
+  .dlg{background:var(--panel);border:1px solid var(--bd);border-radius:12px;
+    max-width:640px;width:100%;padding:18px}
+  .dlg .top{display:flex;gap:11px;align-items:flex-start}
+  .dlg .top img.av{width:46px;height:46px;border-radius:50%;flex:none;background:var(--panel2)}
+  .dlg h3{margin:0 0 3px;font-size:16px}
+  .dlg .x{margin-left:auto;background:none;border:none;color:var(--dim);
+    font-size:22px;cursor:pointer;padding:0 4px;line-height:1}
+  .dlg .full{margin-top:13px;padding-top:13px;border-top:1px solid var(--bd);
+    white-space:pre-wrap;word-break:break-word;font-size:13.5px;line-height:1.75}
+  .dlg .full img{max-width:100%;max-height:60vh;object-fit:contain;
+    object-position:top left;border-radius:8px;margin-top:12px;display:block;
+    background:#0b0e13}
+  .dlg .nav{display:flex;gap:8px;margin-top:15px;padding-top:13px;
+    border-top:1px solid var(--bd);align-items:center}
+  .dlg .nav .sp{flex:1}
+
+  /* 관리자 — ?admin=1 로 들어왔을 때만 보인다 */
+  .adm{display:flex;gap:6px;margin-top:8px}
+  .adm button{padding:4px 10px;font-size:11.5px;font-weight:700}
+  .adm button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .adm button.off{background:#3a1b1f;border-color:#7d2d36;color:#ffb3ba}
+  .item.fixed{border-color:#3a5f8a;background:#131c27}
+  .item.fixed .rank{color:var(--acc)}
+  .item.dropped{opacity:.42}
+  .admbar{background:#1a2230;border:1px solid #33507a;border-radius:10px;
+    padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#bcd3f0}
+  .admbar b{color:#e6edf5}
+  .admbar .r2{margin-top:9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .empty{color:var(--dim);font-size:13px;text-align:center;padding:26px 10px}
+  .foot{color:var(--dim);font-size:12px;margin-top:22px;line-height:1.8;
+    border-top:1px solid var(--bd);padding-top:14px}
+  @media (max-width:520px){
+    .rank{width:24px;font-size:14px}
+    .pic{width:32px;height:32px}
+    .shot img{max-width:150px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1><span class="d"></span>좋아요 순위</h1>
+  <p class="sub">SOOP 방송국 게시글에 달린 <b>댓글을 좋아요 순으로</b> 줄 세웁니다. 뽑을 인원을 넣으면 커트라인을 그어 줍니다.</p>
+
+  <div class="card">
+    <div class="row">
+      <input type="text" id="url" placeholder="게시글 주소를 붙여넣으세요 (예: https://www.sooplive.com/station/dalchesom/post/201070387)">
+      <span class="lbl">뽑을 인원</span>
+      <input type="number" id="n" min="0" max="9999" value="20">
+      <button class="primary" id="go">불러오기</button>
+    </div>
+    <div class="hint">
+      주소는 <code>www.sooplive.com/station/&lt;아이디&gt;/post/&lt;번호&gt;</code> 모양입니다.
+      게시글에서 <b>주소 복사</b>를 눌러 그대로 붙여넣으면 됩니다.<br>
+      불러온 뒤 이 페이지 주소를 복사해 두면, 남에게 줬을 때 <b>그 게시글이 바로 열립니다</b>.
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="readbox" id="snapbar" style="display:none;margin-top:0;margin-bottom:12px"></div>
+  <div class="admbar" id="admbar" style="display:none"></div>
+  <div class="card post" id="post" style="display:none"></div>
+
+  <div id="listbox" style="display:none">
+    <div class="tools">
+      <div class="views">
+        <button id="vtable" class="on">전체 종합표</button>
+        <button id="vcard">지원서 보기</button>
+      </div>
+      <button id="todo">아직 확인 안 한 것만</button>
+      <input type="text" id="q" placeholder="닉네임 · 아이디 · 내용으로 찾기" style="flex:1;min-width:180px">
+      <button id="copy">뽑힌 사람 복사</button>
+      <button id="reload">새로고침</button>
+      <button id="freeze">이 순간으로 고정</button>
+      <span class="n" id="count"></span>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div class="ov" id="ov"><div class="dlg" id="dlg"></div></div>
+
+  <div class="foot">
+    좋아요 수는 <b>SOOP 에서 그때그때 직접</b> 가져옵니다. 저장하지 않으니 새로고침하면 늘 최신입니다.<br>
+    순위는 <b>좋아요 순서 하나</b>로만 매깁니다. 팔로워 수는 참고용으로 보여 줄 뿐 순위에 넣지 않습니다.<br>
+    한 사람이 댓글을 여러 개 달았으면 <b>좋아요가 가장 많은 것</b> 하나만 셉니다. 답글(대댓글)은 지원으로 세지 않습니다.
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────── SOOP 주소
+// 막히면 여기만 중계 서버 주소로 바꾸면 된다. 지금은 CORS 가 열려 있어
+// 브라우저가 직접 부른다(실측: 다른 출처에서 200).
+const API_POST = (bid, no) =>
+  `https://api-channel.sooplive.com/v1.1/channel/${bid}/post/${no}`;
+const API_COMMENT = (bid, no, page) =>
+  `https://api-channel.sooplive.com/v1.1/channel/${bid}/post/${no}/comment?page=${page}&perPage=30`;
+// 그 사람 방송국. 뽑을 때 "이 사람이 누구지" 를 바로 확인할 수 있어야 한다.
+const STATION_URL = (uid) =>
+  `https://www.sooplive.com/station/${encodeURIComponent(uid)}`;
+const API_STATION = (uid) =>
+  `https://chapi.sooplive.co.kr/api/${encodeURIComponent(uid)}/station`;
+
+const CFG = Object.assign({
+  title: '좋아요 순위', subtitle: '', pageTitle: '', defaultPickCount: 20,
+  defaultPostUrl: '', colors: {}, show: {}, footer: [], apiBase: null,
+}, window.PICK_CONFIG || {});
+CFG.show = Object.assign({ followers: true, checked: true, bestBadge: true,
+  photos: true, postBody: true, search: true, copyButton: true }, CFG.show || {});
+// 예전 이름도 받아 준다
+if (CFG.show.streamerHeart !== undefined) CFG.show.checked = CFG.show.streamerHeart;
+
+// 스트리머가 그 지원서를 **읽었다는 표시**다. 좋다는 뜻이 아니다.
+// 그래서 확인한 것에 표를 다는 게 아니라 **아직 안 본 것**에 단다 —
+// 모집 중에 궁금한 건 "내가 아직 안 본 게 누구냐" 이기 때문이다.
+// (실측: 마감된 글은 82명 전원이 확인 상태라, 확인한 쪽에 표를 달면
+//  똑같은 표가 82개 찍혀서 아무 정보도 아니게 된다.)
+const isChecked = (c) => !!c.bjlike;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('ko-KR'));
+
+let STATE = { bid: null, no: null, post: null, people: [], fans: {}, when: null };
+
+// 관리자 — ?admin=1 로 들어오면 켜진다. 서버가 없으므로 고른 것은 **주소에**
+// 담는다. 그래야 그 주소를 그대로 남에게 주면 같은 화면이 열린다.
+//   ex=아이디,아이디   제외한 사람
+//   fix=아이디,아이디  무조건 넣을 사람 (맨 위로)
+const ADMIN = { on: false, ex: new Set(), fix: new Set() };
+
+// 보기 방식. 'table' 은 순위를 한눈에 훑는 종합표, 'card' 는 지원서를 읽는 판.
+// 뽑을 때는 먼저 표로 훑고, 궁금한 사람만 눌러서 지원서를 본다.
+let VIEW = 'table';
+let ONLY_TODO = false;         // '아직 확인 안 한 것만' 켜져 있나
+
+function say(text, kind) {
+  const m = $('#msg');
+  if (!text) { m.className = 'msg'; return; }
+  m.className = 'msg show ' + (kind || 'i');
+  m.textContent = text;
+}
+
+// 주소에서 아이디와 글번호를 뽑는다. 사람들이 붙여넣는 모양이 여러 가지다.
+function parsePost(text) {
+  const t = (text || '').trim();
+  if (!t) return null;
+  // .../station/<bid>/post/<no>  ·  .../<bid>/post/<no>
+  let m = t.match(/(?:station\/)?([A-Za-z0-9_-]+)\/post\/(\d+)/);
+  if (m) return { bid: m[1], no: m[2] };
+  return null;
+}
+
+async function getJSON(url) {
+  const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!r.ok) {
+    // SOOP 가 왜 막았는지 알려 줄 때가 있다("이 게시판은 애청자 공개입니다").
+    // 그걸 버리고 'HTTP 403' 만 보여주면 사람은 뭘 해야 할지 모른다.
+    let why = '';
+    try { why = (await r.json()).message || ''; } catch { /* 본문이 JSON 이 아닐 수 있다 */ }
+    const e = new Error(why || ('HTTP ' + r.status));
+    e.status = r.status;
+    throw e;
+  }
+  return r.json();
+}
+
+// ─────────────────────────────────────────────────────────── 불러오기
+async function load(bid, no) {
+  say('불러오는 중…', 'i');
+  $('#go').disabled = true;
+  try {
+    // 글 정보는 **있으면 좋은 것**이지 없으면 못 하는 것이 아니다.
+    // 애청자 공개 게시판은 글이 403 인데 댓글은 그대로 읽힌다(실측).
+    // 여기서 통째로 실패하면 정작 볼 수 있는 순위까지 못 보게 된다.
+    let post = null, postWhy = '';
+    try {
+      post = await getJSON(API_POST(bid, no));
+    } catch (e) {
+      postWhy = e.message || '';
+    }
+
+    // 댓글은 30개씩 나눠서 온다. 끝까지 넘긴다.
+    let all = [], page = 1, last = 1;
+    do {
+      const d = await getJSON(API_COMMENT(bid, no, page));
+      all = all.concat(d.data || []);
+      last = (d.meta && d.meta.lastPage) || 1;
+      page++;
+    } while (page <= last && page <= 60);   // 1,800개까지. 그 이상이면 끊는다.
+
+    // 한 사람이 여러 번 달았으면 **좋아요가 가장 많은 것**만 남긴다.
+    // 지원 글을 고쳐 쓰느라 두 번 다는 일이 흔하다.
+    const best = new Map();
+    for (const c of all) {
+      const cur = best.get(c.userId);
+      if (!cur || (c.likeCnt || 0) > (cur.likeCnt || 0)) best.set(c.userId, c);
+    }
+    const people = [...best.values()].sort((a, b) =>
+      (b.likeCnt || 0) - (a.likeCnt || 0) ||
+      String(a.regDate).localeCompare(String(b.regDate)));   // 같으면 먼저 쓴 사람이 위
+
+    STATE = { bid, no, post, postWhy, people, info: readPost(post),
+              fans: STATE.fans || {}, when: new Date() };
+    // 글에 인원이 적혀 있으면 그걸 기본값으로. 단, 주소에 이미 인원이
+    // 들어 있으면(남이 준 링크) 그쪽이 우선이다.
+    if (STATE.info.count && !new URLSearchParams(location.search).get('n'))
+      $('#n').value = STATE.info.count;
+    say('');
+    render();
+    paintSnap();
+    paintAdmin();
+    fetchFans();
+  } catch (e) {
+    say('불러오지 못했습니다 — ' + e.message +
+        (e.status === 403 ? ' (그 게시판을 볼 수 있는 계정이어야 합니다)'
+                          : '. 주소가 맞는지 확인해 주세요.'), 'e');
+  } finally {
+    $('#go').disabled = false;
+  }
+}
+
+// 팔로워는 순위에 안 쓴다. 보여주기만 하므로 **화면에 있는 것부터** 천천히 가져온다.
+// 지원자가 수백 명인 글에서 전부 한꺼번에 부르면 예의가 아니다.
+async function fetchFans() {
+  const ids = STATE.people.map(p => p.userId).filter(id => !(id in STATE.fans));
+  for (let i = 0; i < ids.length; i += 12) {
+    const chunk = ids.slice(i, i + 12);
+    await Promise.all(chunk.map(async (id) => {
+      try {
+        const d = await getJSON(API_STATION(id));
+        // 팔로워를 부르는 김에 등급도 같이 받아 둔다. 부르는 횟수는 그대로다.
+        STATE.fans[id] = {
+          fan: ((d.station || {}).upd || {}).fan_cnt ?? null,
+          best: !!d.is_best_bj,          // 진짜 '베스트 BJ'
+          partner: !!d.is_partner_bj,    // 파트너 BJ
+        };
+      } catch { STATE.fans[id] = { fan: null, best: false, partner: false }; }
+    }));
+    paintFans();
+    if (i + 12 < ids.length) await new Promise(r => setTimeout(r, 120));
+  }
+}
+
+function paintFans() {
+  document.querySelectorAll('[data-fan]').forEach(el => {
+    const v = STATE.fans[el.dataset.fan];
+    if (v === undefined) return;
+    el.textContent = (!v || v.fan == null) ? '방송국 없음' : '팔로워 ' + fmt(v.fan);
+  });
+  // 등급은 방송국을 받아 봐야 안다. 받는 대로 채워 넣는다.
+  document.querySelectorAll('[data-grade]').forEach(el => {
+    const v = STATE.fans[el.dataset.grade];
+    if (v === undefined) return;
+    el.innerHTML = (v && v.partner ? '<span class="chip best">파트너 BJ</span>' : '')
+                 + (v && v.best ? '<span class="chip best">베스트 BJ</span>' : '');
+  });
+}
+
+// ─────────────────────────────────────────────────────────── 마감 시점 고정
+// SOOP 은 "지금 좋아요" 만 준다. 8월 1일에 몇 개였는지는 안 알려준다.
+// 그래서 마감이 지난 글을 나중에 열면 그 뒤로 쌓인 좋아요까지 섞인다.
+//
+// 서버가 없으니 저장할 데가 없다. 대신 **바뀌는 것만** 얼려서 주소에 담는다 —
+// 아이디와 그때의 좋아요 수만. 글 내용·사진·프로필은 안 변하니 그때그때
+// 새로 받으면 된다. 그래서 담을 것이 작고, 주소 하나로 남에게 줄 수 있다.
+//
+//   snap = <찍은 시각(초)>|<아이디>.<좋아요>,<아이디>.<좋아요>,…   (base64url)
+let SNAP = null;               // { at: Date, likes: {아이디: 수} }
+
+function b64enc(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64dec(str) {
+  const t = str.replace(/-/g, '+').replace(/_/g, '/');
+  return decodeURIComponent(escape(atob(t + '==='.slice((t.length + 3) % 4))));
+}
+
+function makeSnap(people) {
+  const at = Math.floor(Date.now() / 1000);
+  const body = people.map(c => `${c.userId}.${c.likeCnt || 0}`).join(',');
+  return b64enc(at + '|' + body);
+}
+function readSnap(raw) {
+  try {
+    const [at, body] = b64dec(raw).split('|');
+    const likes = {};
+    for (const kv of (body || '').split(',')) {
+      const i = kv.lastIndexOf('.');
+      if (i > 0) likes[kv.slice(0, i)] = +kv.slice(i + 1);
+    }
+    if (!Object.keys(likes).length) return null;
+    // 원본 문자열을 그대로 들고 다닌다. 주소에 다시 쓸 때 이걸 그대로 쓴다 —
+    // 새로 만들면 찍은 시각이 '지금' 으로 바뀌고, 새로고침 직후처럼 아직
+    // 댓글을 안 받았을 때는 **빈 고정**이 되어 버린다(실측).
+    return { at: new Date(+at * 1000), likes, raw };
+  } catch { return null; }
+}
+
+// 고정된 상태에서 그 사람의 좋아요. 고정 안 됐으면 지금 값.
+const likesOf = (c) => (SNAP && SNAP.likes[c.userId] != null)
+  ? SNAP.likes[c.userId] : (c.likeCnt || 0);
+
+// ─────────────────────────────────────────────────────────── 글에서 읽어내기
+// 모집 글에는 보통 마감·인원·프리패스가 적혀 있다. 사람이 옮겨 적게 하면
+// 틀리기도 하고 귀찮기도 해서, 읽을 수 있는 것은 읽어 준다.
+// **다만 읽은 것은 반드시 보여주고 고칠 수 있게 한다.** 자유롭게 쓴 글을
+// 기계가 읽는 것이라 틀릴 수 있고, 조용히 틀리면 엉뚱한 인원으로 뽑게 된다.
+
+function postText(post) {
+  if (!post) return '';
+  const raw = (post.content && (post.content.content || post.content.textContent)) || '';
+  return String(raw)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/[ \t]+/g, ' ');
+}
+
+// "8월 1일 23시 59분" · "2026.08.01" · "8/1" 같은 것을 날짜로.
+// 연도가 없으면 글 올린 해를 쓰되, 그러면 마감이 글보다 앞서는 경우가
+// 생기므로(12월 글의 1월 마감) 그때는 다음 해로 본다.
+function parseWhen(text, postDate) {
+  const base = postDate ? new Date(String(postDate).replace(' ', 'T')) : new Date();
+  let y, mo, d;
+  let m = text.match(/(20\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})/);
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else {
+    m = text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/) || text.match(/(\d{1,2})\s*[./]\s*(\d{1,2})(?!\d)/);
+    if (!m) return null;
+    mo = +m[1]; d = +m[2]; y = base.getFullYear();
+  }
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  let hh = 23, mm = 59;
+  const t = text.match(/(\d{1,2})\s*시\s*(\d{1,2})?\s*분?/) || text.match(/(\d{1,2}):(\d{2})/);
+  if (t) { hh = +t[1]; mm = t[2] ? +t[2] : 0; }
+  if (hh > 23 || mm > 59) { hh = 23; mm = 59; }
+  let when = new Date(y, mo - 1, d, hh, mm);
+  if (postDate && when < base) when = new Date(y + 1, mo - 1, d, hh, mm);
+  return when;
+}
+
+function readPost(post) {
+  const out = { deadline: null, deadlineLine: '', countLine: '', count: null, pass: '' };
+  const txt = postText(post);
+  if (!txt.trim()) return out;
+
+  // **항목 이름과 값이 다른 줄에 있을 수 있다.** 실측: '선정 방식 :' 다음 줄에
+  // 'UP순 참고한 옾덜식 6~70명' 이 있었다. 그래서 줄 하나가 아니라
+  // '그 줄 + 다음 두 줄' 을 같이 본다.
+  const lines = txt.split('\n').map(x => x.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const ctx = [l, lines[i + 1] || '', lines[i + 2] || ''].join(' ').trim();
+
+    // 마감 — '서버 기간' 같은 것과 헷갈리지 않게 '마감/종료' 가 있는 줄만
+    if (!out.deadline && /마감|접수\s*종료|모집\s*종료/.test(l)) {
+      const seg = ctx.split(/마감|종료/).slice(1).join(' ') || ctx;
+      const when = parseWhen(seg, post && post.regDate);
+      if (when) { out.deadline = when; out.deadlineLine = ctx.slice(0, 90); }
+    }
+    // 인원 — '선정/선발/모집' 근처의 'N명'
+    if (!out.countLine && /선정|선발|모집|인원/.test(l) && /\d+\s*명/.test(ctx)) {
+      out.countLine = ctx.slice(0, 90);
+      const nums = [...ctx.matchAll(/(\d+)\s*(?:~|-|―|부터)\s*(\d+)\s*명|(\d+)\s*명/g)].pop();
+      if (nums) out.count = +(nums[2] || nums[3] || nums[1]);   // 범위면 큰 쪽
+    }
+  }
+  // 프리패스 — 그 뒤 문단 통째로 (이름을 하나씩 자르지 않는다. 자유 형식이라
+  // 자르다 틀리느니, 지원자 닉네임이 이 글에 들어 있는지로 맞춘다)
+  const fp = txt.match(/(프리\s*패스|프리패스)([\s\S]{0,400})/);
+  if (fp) out.pass = fp[2].replace(/\s+/g, ' ').trim().slice(0, 300);
+  return out;
+}
+
+const isPass = (c, info) =>
+  !!(info && info.pass && (c.userNick || '').length >= 2 &&
+     info.pass.includes(c.userNick.trim()));
+
+// ─────────────────────────────────────────────────────────── 그리기
+function render() {
+  const p = STATE.post, people = ranked();
+
+  // 글을 못 읽은 경우(애청자 공개 등). 댓글은 읽혔으니 순위는 그대로 보여주고,
+  // 왜 제목이 안 나오는지만 밝힌다.
+  if (!p) {
+    $('#post').style.display = '';
+    $('#post').innerHTML =
+      `<h2>${esc(STATE.bid)} 님의 게시글 <span style="color:var(--dim);
+         font-size:13px;font-weight:400">#${esc(STATE.no)}</span></h2>
+       <div class="meta">
+         <span><b>지원 ${fmt(people.length)}명</b></span>
+         <a class="open" href="https://www.sooplive.com/station/${esc(STATE.bid)}/post/${esc(STATE.no)}"
+            target="_blank" rel="noopener">게시글 열기 ↗</a>
+       </div>
+       <div class="hint" style="margin-top:9px">글 제목과 본문은 못 읽었습니다${
+         STATE.postWhy ? ' — <b>' + esc(STATE.postWhy) + '</b>' : ''}.
+         <b>댓글은 읽히므로 순위는 아래에 그대로 나옵니다.</b></div>`;
+    $('#listbox').style.display = '';
+    paintList();
+    return;
+  }
+
+  const cnt = (p.count || {});
+  $('#post').style.display = '';
+  $('#post').innerHTML =
+    `<h2>${esc(p.titleName || '(제목 없음)')}</h2>
+     <div class="meta">
+       <b>${esc(p.userNick || p.userId || '')}</b>
+       <span>${esc((p.regDate || '').slice(0, 16))}</span>
+       <span>조회 ${fmt(cnt.readCnt)}</span>
+       <span>글 좋아요 ${fmt(cnt.likeCnt)}</span>
+       <span><b>지원 ${fmt(people.length)}명</b></span>
+       <a href="https://www.sooplive.com/station/${esc(STATE.bid)}/post/${esc(STATE.no)}"
+          target="_blank" rel="noopener">게시글 열기 ↗</a>
+     </div>`;
+
+  // 글에서 읽어낸 것. 읽은 근거(원문 줄)를 같이 보여줘서 틀렸는지 알 수 있게 한다.
+  const info = STATE.info || {};
+  if (info.deadline || info.countLine || info.pass) {
+    const bits = [];
+    if (info.deadline) {
+      const days = Math.floor((Date.now() - info.deadline) / 86400000);
+      const when = info.deadline.toLocaleString('ko-KR',
+        { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      bits.push(days >= 0
+        ? `<span class="warn">⚠ <b>신청 마감 ${esc(when)}</b> — 이미 지났습니다.
+           지금 보이는 좋아요는 그 뒤로 <b>${days}일</b> 더 쌓인 값이라 마감 당시
+           순위와 다를 수 있습니다.</span>`
+        : `<b>신청 마감 ${esc(when)}</b> — 아직 모집 중입니다. 좋아요는 계속 바뀝니다.`);
+      bits.push(`<span class="t" style="color:#7f9dc4">글에서 읽음: ${esc(info.deadlineLine)}</span>`);
+    }
+    if (info.countLine) {
+      bits.push(`<b>선발 인원</b> ${esc(info.countLine)}` +
+        (info.count ? ` <button id="usecount">${fmt(info.count)}명으로 맞추기</button>` : ''));
+    }
+    if (info.pass) {
+      bits.push(`<b>프리패스</b> ${esc(info.pass.slice(0, 160))}${info.pass.length > 160 ? '…' : ''}`);
+    }
+    $('#post').insertAdjacentHTML('beforeend',
+      `<div class="readbox">${bits.join('<br>')}</div>`);
+    const uc = $('#usecount');
+    if (uc) uc.addEventListener('click', () => {
+      $('#n').value = info.count; syncUrl(); paintList();
+    });
+  }
+
+
+  $('#listbox').style.display = '';
+  paintList();
+}
+
+// 관리자가 고른 것을 반영한 최종 줄 세우기.
+// 제외한 사람은 빼고, 확정한 사람은 맨 위로 올린다. 나머지는 좋아요 순 그대로.
+function ranked() {
+  const keep = STATE.people.filter(c => !ADMIN.ex.has(c.userId));
+  const fix = keep.filter(c => ADMIN.fix.has(c.userId));
+  const rest = keep.filter(c => !ADMIN.fix.has(c.userId));
+  return fix.concat(rest);
+}
+
+function paintList() {
+  const people = ranked();
+  const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+  const q = ($('#q').value || '').trim().toLowerCase();
+
+  const hit = (c) => (!ONLY_TODO || !isChecked(c)) && (!q ||
+    (c.userNick || '').toLowerCase().includes(q) ||
+    (c.userId || '').toLowerCase().includes(q) ||
+    (c.comment || '').toLowerCase().includes(q));
+
+  const when = STATE.when
+    ? STATE.when.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+  // 스트리머가 아직 안 본 지원서가 몇 개인지. 모집 중에는 이게 할 일 목록이다.
+  const todo = people.filter(c => !isChecked(c)).length;
+  const tb = $('#todo');
+  tb.style.display = (CFG.show.checked && todo) ? '' : 'none';
+  tb.classList.toggle('primary', ONLY_TODO);
+  tb.textContent = ONLY_TODO ? `전부 보기 (${fmt(people.length)}명)`
+                             : `아직 확인 안 한 것만 (${fmt(todo)}명)`;
+
+  $('#count').textContent =
+    `${fmt(people.length)}명` +
+    (CFG.show.checked
+      ? (todo ? ` · 스트리머가 아직 안 본 것 ${fmt(todo)}명`
+              : ' · 스트리머가 전부 확인함')
+      : '') +
+    (ADMIN.ex.size ? ` · 제외 ${ADMIN.ex.size}명` : '') +
+    (q ? ` · 찾은 것 ${people.filter(hit).length}명` : '') +
+    (when ? ` · ${when} 기준` : '');
+
+  if (VIEW === 'table') { paintTable(people, n, hit); return; }
+
+  let html = '';
+  people.forEach((c, i) => {
+    const rank = i + 1;
+    const inCut = n > 0 && rank <= n;
+
+    // 커트라인 선. 그리고 **동점 경고** — 20등과 21등이 좋아요가 같으면
+    // 선만 긋고 넘어가면 안 된다. 사람이 정해야 하는 자리다.
+    if (n > 0 && rank === n + 1) {
+      html += `<div class="cut">여기까지 ${fmt(n)}명</div>`;
+      const prev = people[n - 1];
+      if (prev && (prev.likeCnt || 0) === (c.likeCnt || 0)) {
+        const same = people.filter(x => (x.likeCnt || 0) === (c.likeCnt || 0)).length;
+        html += `<div class="tie">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등의 좋아요가
+          ${fmt(c.likeCnt)}개로 같습니다.</b> 같은 점수인 사람이 ${fmt(same)}명이라
+          여기서는 순위를 가를 수 없습니다 — 뽑을 인원을 바꾸거나 직접 정하세요.</div>`;
+      }
+    }
+    if (!hit(c)) return;
+
+    const photo = c.photo && c.photo.url;
+    const isFix = ADMIN.fix.has(c.userId);
+    html += `<div class="item${inCut ? ' in' : ''}${isFix ? ' fixed' : ''}">
+      <div class="rank">${rank}</div>
+      <img class="pic" loading="lazy" alt=""
+           src="${esc(c.profileImage || '')}"
+           onerror="this.style.visibility='hidden'">
+      <div class="who">
+        <div class="nm">
+          <a class="sta" href="${esc(STATION_URL(c.userId))}" target="_blank" rel="noopener"
+             title="${esc(c.userNick || '')} 님의 방송국 열기"><b>${esc(c.userNick || '')}</b> ↗</a>
+          <span class="id">${esc(c.userId || '')}</span>
+          ${CFG.show.checked && !isChecked(c) ? '<span class="chip todo">아직 확인 안 함</span>' : ''}
+          ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+          ${isPass(c, STATE.info) ? '<span class="chip pass" title="글의 프리패스 명단에 이 닉네임이 있습니다">프리패스?</span>' : ''}
+          ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
+        </div>
+        <div class="nums">
+          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span></span>
+          ${CFG.show.followers ? `<span class="fan" data-fan="${esc(c.userId)}">…</span>` : ''}
+          <span>${esc((c.regDate || '').slice(5, 16))}</span>
+        </div>
+        ${(c.comment || (photo && CFG.show.photos)) ? `<div class="appl">
+          ${c.comment ? `<div class="txt">${esc(c.comment)}</div>` : ''}
+          ${photo && CFG.show.photos ? `<div class="shot">
+             <a href="${esc(photo)}" target="_blank" rel="noopener">
+               <img loading="lazy" src="${esc(photo)}" alt=""></a>
+             <span class="zoom">눌러서 원본 크기로</span>
+           </div>` : ''}
+        </div>` : ''}
+        ${ADMIN.on ? `<div class="adm">
+           <button class="admfix ${isFix ? 'on' : ''}" data-id="${esc(c.userId)}">${isFix ? '확정됨' : '확정'}</button>
+           <button class="admex" data-id="${esc(c.userId)}">제외</button>
+         </div>` : ''}
+      </div>
+    </div>`;
+  });
+
+  $('#list').innerHTML = html ||
+    `<div class="empty">${people.length ? '찾는 사람이 없습니다.'
+      : '이 글에는 아직 댓글이 없습니다.'}</div>`;
+
+  // 관리자 버튼
+  document.querySelectorAll('.admfix').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.id;
+    ADMIN.fix.has(id) ? ADMIN.fix.delete(id) : ADMIN.fix.add(id);
+    ADMIN.ex.delete(id);
+    syncUrl(); paintList(); paintAdmin();
+  }));
+  document.querySelectorAll('.admex').forEach(b => b.addEventListener('click', () => {
+    ADMIN.ex.add(b.dataset.id); ADMIN.fix.delete(b.dataset.id);
+    syncUrl(); paintList(); paintAdmin();
+  }));
+
+  paintFans();
+}
+
+// 고정 안내줄. 언제 기준인지 · 그 뒤로 몇 명이 더 달렸는지.
+function paintSnap() {
+  const bar = $('#snapbar');
+  const btn = $('#freeze');
+  if (!SNAP) {
+    bar.style.display = 'none';
+    btn.textContent = '이 순간으로 고정';
+    btn.classList.remove('primary');
+    return;
+  }
+  const after = STATE.people.filter(c => SNAP.likes[c.userId] == null).length;
+  const moved = STATE.people.filter(c => SNAP.likes[c.userId] != null &&
+                                    (c.likeCnt || 0) !== SNAP.likes[c.userId]).length;
+  bar.style.display = '';
+  bar.innerHTML =
+    `🔒 <b>${esc(SNAP.at.toLocaleString('ko-KR'))} 기준으로 고정된 순위</b>입니다.
+     좋아요가 그 뒤로 바뀌어도 순위는 안 움직입니다.<br>` +
+    (after ? `그 뒤에 달린 댓글 <b>${fmt(after)}개</b>는 뺐습니다. ` : '') +
+    (moved ? `<b>${fmt(moved)}명</b>은 그 뒤로 좋아요가 바뀌었습니다(옆에 '지금 ○' 로 적었습니다).`
+           : '고정한 뒤로 바뀐 사람은 없습니다.') +
+    `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+       <button id="snapshare" class="primary">이 순위 그대로 주소 복사</button>
+       <button id="snapoff">고정 풀기</button>
+     </div>`;
+  btn.textContent = '고정됨';
+  btn.classList.add('primary');
+  $('#snapshare').addEventListener('click', () => {
+    const b = $('#snapshare');
+    const u = new URL(location.href); u.searchParams.delete('admin');
+    navigator.clipboard.writeText(u.toString()).then(() => {
+      b.textContent = '복사했습니다';
+      setTimeout(() => { b.textContent = '이 순위 그대로 주소 복사'; }, 1500);
+    });
+  });
+  $('#snapoff').addEventListener('click', () => {
+    SNAP = null; syncUrl(); render(); paintSnap(); paintAdmin();
+  });
+}
+
+// 관리자 안내줄. 무엇을 고쳤는지와, 남에게 줄 주소를 낸다.
+function paintAdmin() {
+  const bar = $('#admbar');
+  if (!ADMIN.on) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const share = new URL(location.href);
+  share.searchParams.delete('admin');       // 남에게 줄 때는 관리자 모드를 뺀다
+  bar.innerHTML =
+    `<b>관리자 모드</b> — 각 줄의 <b>확정</b>·<b>제외</b>를 누르면 순위가 바뀝니다. ` +
+    `고른 것은 주소에 담기므로 저장할 필요가 없습니다.<br>` +
+    `확정 <b>${ADMIN.fix.size}</b>명 · 제외 <b>${ADMIN.ex.size}</b>명` +
+    (ADMIN.ex.size ? ` <button id="admreset" style="padding:3px 9px;font-size:11.5px;margin-left:6px">제외 되돌리기</button>` : '') +
+    `<div class="r2">
+       <button id="admshare" class="primary">보는 사람용 주소 복사</button>
+       <span style="color:#8fa8c8">이 주소를 주면 지금 이 순위 그대로 보입니다 (관리자 버튼은 안 보임)</span>
+     </div>`;
+  const sb = $('#admshare');
+  if (sb) sb.addEventListener('click', () => {
+    navigator.clipboard.writeText(share.toString()).then(() => {
+      sb.textContent = '복사했습니다';
+      setTimeout(() => { sb.textContent = '보는 사람용 주소 복사'; }, 1500);
+    });
+  });
+  const rb = $('#admreset');
+  if (rb) rb.addEventListener('click', () => {
+    ADMIN.ex.clear(); syncUrl(); paintList(); paintAdmin();
+  });
+}
+
+// ─────────────────────────────────────────────────────────── 전체 종합표
+// 순위를 한눈에 훑는 판. 글은 한 줄만 맛보기로 보이고, 누르면 지원서가 뜬다.
+// 뽑을 때 실제로 하는 일이 "쭉 훑다가 몇 명만 자세히 본다" 라서 이 순서가 맞다.
+function paintTable(people, n, hit) {
+  // 전원이 확인된 글에서는 '확인' 칸이 통째로 비어 있게 된다. 그런 칸은
+  // 아예 내보내지 않는다 — 빈 칸에 머리글만 있으면 뭘 봐야 하나 싶다.
+  const anyTodo = CFG.show.checked && people.some(c => !isChecked(c));
+  const cols = 5 + (CFG.show.followers ? 1 : 0) + (anyTodo ? 1 : 0) + 1;
+  const rows = [];
+  people.forEach((c, i) => {
+    const rank = i + 1;
+    const inCut = n > 0 && rank <= n;
+    const isFix = ADMIN.fix.has(c.userId);
+
+    if (n > 0 && rank === n + 1) {
+      rows.push(`<tr class="cutrow"><td colspan="${cols}">여기까지 ${fmt(n)}명</td></tr>`);
+      const prev = people[n - 1];
+      if (prev && (prev.likeCnt || 0) === (c.likeCnt || 0)) {
+        const same = people.filter(x => (x.likeCnt || 0) === (c.likeCnt || 0)).length;
+        rows.push(`<tr><td colspan="${cols}" style="background:#2e2718;color:#e8cd88;
+          font-size:12px;padding:9px 10px">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등이
+          ${fmt(c.likeCnt)}개로 같습니다</b> — 같은 점수가 ${fmt(same)}명이라
+          여기서는 못 가릅니다. 인원을 바꾸거나 직접 정하세요.</td></tr>`);
+      }
+    }
+    if (!hit(c)) return;
+
+    const peek = (c.comment || '').replace(/\s+/g, ' ').trim();
+    const hasPic = c.photo && c.photo.url && CFG.show.photos;
+
+    rows.push(`<tr class="${inCut ? 'in' : ''}${isFix ? ' fixed' : ''}" data-open="${esc(c.userId)}">
+      <td class="rk r">${rank}</td>
+      <td><div class="who2">
+        <img loading="lazy" alt="" src="${esc(c.profileImage || '')}"
+             onerror="this.style.visibility='hidden'">
+        <b>${esc(c.userNick || '')}</b>
+        ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+        ${isPass(c, STATE.info) ? '<span class="chip pass" title="글의 프리패스 명단에 이 닉네임이 있습니다">프리패스?</span>' : ''}
+        ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
+      </div></td>
+      <td class="hidesm"><a class="sta" href="${esc(STATION_URL(c.userId))}"
+         target="_blank" rel="noopener" data-stop="1"
+         title="${esc(c.userNick || '')} 님의 방송국 열기">방송국 ↗</a></td>
+      <td class="idc hidesm">${esc(c.userId || '')}</td>
+      <td class="r lk">${fmt(c.likeCnt)}</td>
+      ${CFG.show.followers
+        ? `<td class="r hidesm" data-fan="${esc(c.userId)}" style="color:var(--mut)">…</td>` : ''}
+      ${anyTodo ? `<td class="hidesm">${isChecked(c) ? ''
+        : '<span class="chip todo">미확인</span>'}</td>` : ''}
+      <td class="peek hidesm">${hasPic ? '📷 ' : ''}${esc(peek.slice(0, 44))}</td>
+    </tr>`);
+  });
+
+  $('#list').innerHTML = rows.length
+    ? `<div class="tblwrap"><table class="tbl"><thead><tr>
+         <th class="r">순위</th><th>닉네임</th><th class="hidesm"></th><th class="hidesm">아이디</th>
+         <th class="r">좋아요</th>${CFG.show.followers ? '<th class="r hidesm">팔로워</th>' : ''}
+         ${anyTodo ? '<th class="hidesm">확인</th>' : ''}<th class="hidesm">지원서</th>
+       </tr></thead><tbody>${rows.join('')}</tbody></table></div>
+       <div class="hint">줄을 누르면 그 사람 지원서가 열립니다.
+         ${ADMIN.on ? '관리자 버튼은 <b>지원서 보기</b> 쪽에 있습니다.' : ''}</div>`
+    : `<div class="empty">${people.length ? '찾는 사람이 없습니다.' : '이 글에는 아직 댓글이 없습니다.'}</div>`;
+
+  document.querySelectorAll('[data-open]').forEach(tr =>
+    tr.addEventListener('click', (e) => {
+      // 방송국 링크를 눌렀으면 지원서 창은 열지 않는다
+      if (e.target.closest('a')) return;
+      openDetail(tr.dataset.open);
+    }));
+  paintFans();
+}
+
+// ─────────────────────────────────────────────────────────── 지원서 상세
+function openDetail(userId) {
+  const list = ranked();
+  const i = list.findIndex(c => c.userId === userId);
+  if (i < 0) return;
+  const c = list[i], rank = i + 1;
+  const fan = STATE.fans[c.userId];
+  const photo = c.photo && c.photo.url;
+
+  $('#dlg').innerHTML = `
+    <div class="top">
+      <img class="av" alt="" src="${esc(c.profileImage || '')}"
+           onerror="this.style.visibility='hidden'">
+      <div style="min-width:0">
+        <h3><a class="sta" href="${esc(STATION_URL(c.userId))}" target="_blank"
+            rel="noopener">${esc(c.userNick || '')} ↗</a>
+          <span class="idc" style="font-size:12px;color:var(--dim);font-weight:400">
+            ${esc(c.userId || '')}</span></h3>
+        <div class="nums" style="margin-top:2px">
+          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span></span>
+          <span>${rank}위</span>
+          ${CFG.show.followers ? `<span>팔로워 ${fan == null ? '—' : fmt(fan)}</span>` : ''}
+          <span>${esc((c.regDate || '').slice(0, 16))}</span>
+        </div>
+        <div style="margin-top:5px">
+          ${isChecked(c)
+            ? '<span class="chip done">스트리머가 확인함</span>'
+            : '<span class="chip todo">아직 확인 안 함</span>'}
+          <span data-grade="${esc(c.userId)}"></span>
+        </div>
+      </div>
+      <button class="x" id="dx" title="닫기">×</button>
+    </div>
+    <div class="full">${esc(c.comment || '(내용 없음)')}
+      ${photo ? `<a href="${esc(photo)}" target="_blank" rel="noopener">
+         <img src="${esc(photo)}" alt=""></a>` : ''}</div>
+    <div class="nav">
+      <button id="dprev" ${i === 0 ? 'disabled' : ''}>← 앞 사람</button>
+      <button id="dnext" ${i === list.length - 1 ? 'disabled' : ''}>다음 사람 →</button>
+      <span class="sp"></span>
+      ${ADMIN.on ? `<button id="dfix" class="${ADMIN.fix.has(c.userId) ? 'on primary' : ''}">
+          ${ADMIN.fix.has(c.userId) ? '확정됨' : '확정'}</button>
+        <button id="dex">제외</button>` : ''}
+    </div>`;
+  $('#ov').classList.add('on');
+
+  $('#dx').addEventListener('click', closeDetail);
+  const prev = $('#dprev'), next = $('#dnext');
+  if (prev) prev.addEventListener('click', () => openDetail(list[i - 1].userId));
+  if (next) next.addEventListener('click', () => openDetail(list[i + 1].userId));
+  const df = $('#dfix'), de = $('#dex');
+  if (df) df.addEventListener('click', () => {
+    ADMIN.fix.has(c.userId) ? ADMIN.fix.delete(c.userId) : ADMIN.fix.add(c.userId);
+    ADMIN.ex.delete(c.userId);
+    syncUrl(); paintList(); paintAdmin(); openDetail(c.userId);
+  });
+  if (de) de.addEventListener('click', () => {
+    ADMIN.ex.add(c.userId); ADMIN.fix.delete(c.userId);
+    syncUrl(); paintList(); paintAdmin(); closeDetail();
+  });
+}
+function closeDetail() { $('#ov').classList.remove('on'); }
+
+// ─────────────────────────────────────────────────────────── 주소 = 상태
+function syncUrl() {
+  const u = new URL(location.href);
+  if (STATE.bid) {
+    u.searchParams.set('post',
+      `https://www.sooplive.com/station/${STATE.bid}/post/${STATE.no}`);
+  }
+  const n = parseInt($('#n').value, 10);
+  if (n > 0) u.searchParams.set('n', n); else u.searchParams.delete('n');
+  if (ADMIN.ex.size) u.searchParams.set('ex', [...ADMIN.ex].join(',')); else u.searchParams.delete('ex');
+  if (ADMIN.fix.size) u.searchParams.set('fix', [...ADMIN.fix].join(',')); else u.searchParams.delete('fix');
+  if (VIEW !== 'table') u.searchParams.set('view', VIEW); else u.searchParams.delete('view');
+  if (SNAP && SNAP.raw) u.searchParams.set('snap', SNAP.raw);
+  else u.searchParams.delete('snap');
+  history.replaceState(null, '', u);
+}
+
+function start() {
+  const t = parsePost($('#url').value);
+  if (!t) {
+    say('게시글 주소를 알아보지 못했습니다. ' +
+        'www.sooplive.com/station/<아이디>/post/<번호> 모양이어야 합니다.', 'e');
+    return;
+  }
+  syncUrl();
+  load(t.bid, t.no).then(syncUrl);
+}
+
+function setView(v) {
+  VIEW = v;
+  $('#vtable').classList.toggle('on', v === 'table');
+  $('#vcard').classList.toggle('on', v === 'card');
+  syncUrl();
+  if (STATE.people.length) paintList();
+}
+$('#freeze').addEventListener('click', () => {
+  if (!STATE.people.length) return;
+  if (SNAP) {   // 이미 고정돼 있으면 다시 누르면 '지금' 으로 다시 찍는다
+    if (!confirm('이미 고정돼 있습니다. 지금 값으로 다시 찍을까요?')) return;
+  }
+  SNAP = readSnap(makeSnap(STATE.people));
+  syncUrl(); render(); paintSnap(); paintAdmin();
+});
+$('#todo').addEventListener('click', () => {
+  ONLY_TODO = !ONLY_TODO;
+  if (STATE.people.length) paintList();
+});
+$('#vtable').addEventListener('click', () => setView('table'));
+$('#vcard').addEventListener('click', () => setView('card'));
+
+// 상세창은 바깥을 누르거나 Esc 로 닫는다
+$('#ov').addEventListener('click', (e) => { if (e.target.id === 'ov') closeDetail(); });
+document.addEventListener('keydown', (e) => {
+  if (!$('#ov').classList.contains('on')) return;
+  if (e.key === 'Escape') closeDetail();
+  if (e.key === 'ArrowRight') { const b = $('#dnext'); if (b && !b.disabled) b.click(); }
+  if (e.key === 'ArrowLeft')  { const b = $('#dprev'); if (b && !b.disabled) b.click(); }
+});
+
+$('#go').addEventListener('click', start);
+$('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+$('#reload').addEventListener('click', () => {
+  if (STATE.bid) load(STATE.bid, STATE.no);
+});
+$('#n').addEventListener('input', () => { if (STATE.people.length) paintList(); syncUrl(); });
+$('#q').addEventListener('input', () => { if (STATE.people.length) paintList(); });
+$('#copy').addEventListener('click', () => {
+  const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+  const all = ranked();
+  const list = all.slice(0, n || all.length);
+  if (!list.length) return;
+  const text = list.map((c, i) =>
+    `${i + 1}. ${c.userNick} (${c.userId}) — 좋아요 ${likesOf(c)}`).join('\n')
+    + (SNAP ? `\n\n(${SNAP.at.toLocaleString('ko-KR')} 기준으로 고정된 순위)` : '');
+  navigator.clipboard.writeText(text).then(() => {
+    const b = $('#copy'); b.textContent = '복사했습니다';
+    setTimeout(() => { b.textContent = '뽑힌 사람 복사'; }, 1500);
+  });
+});
+
+// 설정(config.js)을 화면에 입힌다. 관리자가 그 파일만 고치면 된다.
+function applyConfig() {
+  if (CFG.pageTitle) document.title = CFG.pageTitle;
+  document.querySelector('h1').innerHTML =
+    '<span class="d"></span>' + esc(CFG.title);
+  if (CFG.subtitle) document.querySelector('.sub').innerHTML = CFG.subtitle;
+  const c = CFG.colors || {};
+  const map = { bg: '--bg', panel: '--panel', accent: '--acc',
+                like: '--like', ok: '--ok' };
+  for (const [k, v] of Object.entries(map))
+    if (c[k]) document.documentElement.style.setProperty(v, c[k]);
+  if (Array.isArray(CFG.footer) && CFG.footer.length)
+    document.querySelector('.foot').innerHTML = CFG.footer.join('<br>');
+  if (!CFG.show.search) $('#q').style.display = 'none';
+  if (!CFG.show.copyButton) $('#copy').style.display = 'none';
+  if (CFG.defaultPickCount) $('#n').value = CFG.defaultPickCount;
+  if (CFG.defaultPostUrl) $('#url').value = CFG.defaultPostUrl;
+}
+
+// 주소에 게시글이 들어 있으면 바로 연다 (남에게 링크를 줬을 때)
+(function boot() {
+  applyConfig();
+  const q = new URLSearchParams(location.search);
+
+  // ① 주소에 있는 값을 **먼저** 전부 읽어 넣는다
+  const n = q.get('n');
+  if (n && +n > 0) $('#n').value = +n;
+  if (q.get('view') === 'card') VIEW = 'card';
+  if (q.get('snap')) SNAP = readSnap(q.get('snap'));
+  ADMIN.on = q.get('admin') === '1';
+  (q.get('ex') || '').split(',').filter(Boolean).forEach(x => ADMIN.ex.add(x));
+  (q.get('fix') || '').split(',').filter(Boolean).forEach(x => ADMIN.fix.add(x));
+
+  // ② 그다음에 그린다 (setView 가 주소를 다시 쓰므로 순서가 중요하다)
+  setView(VIEW);
+  paintAdmin();
+
+  const post = q.get('post') || CFG.defaultPostUrl;
+  if (post) {
+    $('#url').value = post;
+    const t = parsePost(post);
+    if (t) load(t.bid, t.no);
+  }
+})();
+</script>
+</body>
+</html>
