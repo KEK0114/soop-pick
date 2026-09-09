@@ -130,6 +130,11 @@
   .cutnote{color:var(--mut);font-size:12.5px;margin:14px 0 4px;text-align:center;
     border-top:1px dashed var(--bd);padding-top:11px}
   .cutnote b{color:var(--ok)}
+  .sharebar{background:#141922;border:1px solid var(--bd);border-radius:9px;
+    padding:10px 12px;margin:0 0 11px;font-size:12.5px;color:var(--mut);line-height:1.75}
+  .sharebar .ttl{color:var(--tx);font-weight:700}
+  .sharebar .btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 7px}
+  .sharebar b{color:#cbd6e4}
   .now{color:var(--dim);font-size:11px;font-weight:400;margin-left:5px;white-space:nowrap}
 
   /* 보기 바꾸기 */
@@ -249,6 +254,7 @@
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
       <span class="n" id="count"></span>
     </div>
+    <div class="sharebar" id="sharebar" style="display:none"></div>
     <div id="list"></div>
   </div>
 
@@ -764,11 +770,11 @@ function paintList() {
     const id = b.dataset.id;
     ADMIN.fix.has(id) ? ADMIN.fix.delete(id) : ADMIN.fix.add(id);
     ADMIN.ex.delete(id);
-    syncUrl(); paintList(); paintAdmin();
+    syncUrl(); paintList(); paintAdmin(); refreshPin();
   }));
   document.querySelectorAll('.admex').forEach(b => b.addEventListener('click', () => {
     ADMIN.ex.add(b.dataset.id); ADMIN.fix.delete(b.dataset.id);
-    syncUrl(); paintList(); paintAdmin();
+    syncUrl(); paintList(); paintAdmin(); refreshPin();
   }));
 
   paintFans();
@@ -818,44 +824,57 @@ function paintSnap() {
     (RO ? '' :
     `<div class="warn" style="margin-top:7px">이 마감 결과는 <b>지금 이 주소 안에</b> 들어 있습니다.
        어디에도 저장되지 않으므로 <b>창을 닫으면 사라집니다.</b>
-       나중에 다시 보거나 남에게 줄 거면 아래 버튼으로 주소를 복사해 두세요.</div>`) +
-    (RO ? '' :
-    `<div class="hint" style="margin-top:9px;color:#8fa8c8">
-       <b>완전 고정 주소</b>는 결과를 주소 안에 통째로 담습니다 —
-       받은 사람 화면은 SOOP 를 다시 부르지 않아 <b>게시글이 지워져도 그대로</b>이고,
-       새로고침으로도 안 바뀝니다. 대신 주소가 깁니다.
-       <span id="pinlen" style="color:var(--dim)"></span>
-     </div>`) +
-    `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
-       <button id="snapshare" class="primary">이 순위 그대로 주소 복사</button>
-       ${RO ? '' : '<button id="pinshare" class="primary">완전 고정 주소 복사</button>'}
-       ${RO ? '' : '<button id="snapoff">마감 풀기</button>'}
-     </div>`;
+       남에게 줄 주소는 아래 <b>남에게 주기</b> 에 있습니다.</div>
+     <div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+       <button id="snapoff">마감 풀기</button>
+     </div>`);
   btn.textContent = '마감됨';
   btn.classList.add('primary');
-  $('#snapshare').addEventListener('click', () => {
-    const b = $('#snapshare');
+  const off = $('#snapoff');
+  if (off) off.addEventListener('click', () => {
+    SNAP = null; syncUrl(); render(); paintSnap(); paintAdmin(); paintShare();
+  });
+}
+
+// 남에게 주는 자리. 마감을 눌러야만 나오게 두면 찾지를 못한다 — 표 바로 위에
+// 늘 둔다. 주는 방법이 두 가지라, 무엇이 다른지도 그 자리에 적는다.
+function paintShare() {
+  const bar = $('#sharebar');
+  if (RO || PIN || !STATE.people.length) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  bar.innerHTML =
+    `<span class="ttl">남에게 주기</span> — 주소 두 가지가 나옵니다. 둘 다 받은 사람은
+     <b>보기 전용</b>이라 다른 글을 불러오거나 마감을 건드릴 수 없습니다.
+     <div class="btns">
+       <button id="shlive" class="primary">보는 사람용 주소 복사</button>
+       <button id="shpin" class="primary">완전 고정 주소 복사</button>
+       <span id="pinlen" style="color:var(--dim)"></span>
+     </div>
+     · <b>보는 사람용</b> — ${SNAP
+        ? '마감한 순위를 보여 줍니다. 마감을 풀면 그 주소도 같이 풀립니다.'
+        : '<b>지금</b> 순위를 보여 줍니다. 좋아요가 바뀌면 순위도 따라 바뀝니다.'}
+       받은 사람이 새로고침을 할 수 있습니다.<br>
+     · <b>완전 고정</b> — 지금 이 화면을 <b>통째로 굳혀서</b> 줍니다.
+       게시글이 지워져도 그대로이고 무슨 수를 써도 안 바뀝니다. 대신 주소가 깁니다.`;
+  paintPinInfo();
+
+  const live = $('#shlive');
+  live.addEventListener('click', () => {
     navigator.clipboard.writeText(shareUrl()).then(() => {
-      b.textContent = '복사했습니다';
-      setTimeout(() => { b.textContent = '이 순위 그대로 주소 복사'; }, 1500);
+      live.textContent = '복사했습니다';
+      setTimeout(() => { live.textContent = '보는 사람용 주소 복사'; }, 1600);
     });
   });
-  paintPinInfo();
-  const pb = $('#pinshare');
-  if (pb) pb.addEventListener('click', async () => {
-    const back = pb.textContent;
+
+  const pb = $('#shpin');
+  pb.addEventListener('click', async () => {
     pb.disabled = true; pb.textContent = '만드는 중…';
     try {
       const url = PINURL || await makePin();
       await navigator.clipboard.writeText(url);
       pb.textContent = '복사했습니다 (' + fmt(url.length) + '자)';
     } catch (e) { pb.textContent = '복사하지 못했습니다'; }
-    setTimeout(() => { pb.disabled = false; pb.textContent = back; }, 2600);
-  });
-
-  const off = $('#snapoff');
-  if (off) off.addEventListener('click', () => {
-    SNAP = null; syncUrl(); render(); paintSnap(); paintAdmin();
+    setTimeout(() => { pb.disabled = false; pb.textContent = '완전 고정 주소 복사'; }, 2600);
   });
 }
 
@@ -869,18 +888,8 @@ function paintAdmin() {
     `고른 것은 주소에 담기므로 저장할 필요가 없습니다.<br>` +
     `확정 <b>${ADMIN.fix.size}</b>명 · 제외 <b>${ADMIN.ex.size}</b>명` +
     (ADMIN.ex.size ? ` <button id="admreset" style="padding:3px 9px;font-size:11.5px;margin-left:6px">제외 되돌리기</button>` : '') +
-    `<div class="r2">
-       <button id="admshare" class="primary">보는 사람용 주소 복사</button>
-       <span style="color:#8fa8c8">받은 사람에게는 <b>보기 전용</b>으로 열립니다 —
-         다른 글을 불러오거나 마감을 건드릴 수 없고, 새로고침과 엑셀만 됩니다</span>
-     </div>`;
-  const sb = $('#admshare');
-  if (sb) sb.addEventListener('click', () => {
-    navigator.clipboard.writeText(shareUrl()).then(() => {
-      sb.textContent = '복사했습니다';
-      setTimeout(() => { sb.textContent = '보는 사람용 주소 복사'; }, 1500);
-    });
-  });
+    `<div class="hint" style="margin-top:7px">확정·제외한 것은 아래
+       <b>남에게 주기</b> 의 주소에 그대로 담깁니다.</div>`;
   const rb = $('#admreset');
   if (rb) rb.addEventListener('click', () => {
     ADMIN.ex.clear(); syncUrl(); paintList(); paintAdmin();
