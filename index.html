@@ -320,7 +320,8 @@ let ONLY_TODO = false;         // '아직 확인 안 한 것만' 켜져 있나
 // 헷갈려서 잘못 누르는 것을 막는 용도다.
 let RO = false;
 // 결과가 통째로 주소에 담겨 온 경우. SOOP 를 한 번도 안 부른다.
-let PIN = false, PINAT = null, PINURL = null, PINSEQ = 0;
+let PIN = false, PINAT = null, PINURL = null, PINSHORT = null, PINSEQ = 0;
+let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
 
 function say(text, kind) {
   const m = $('#msg');
@@ -791,7 +792,8 @@ function paintSnap() {
     bar.innerHTML =
       `🔒 <b>${esc(PINAT ? PINAT.toLocaleString('ko-KR') : '')} 에 고정된 순위</b>입니다.
        결과가 이 주소 안에 통째로 들어 있어 <b>SOOP 를 다시 부르지 않습니다</b> —
-       게시글이 지워져도 이 화면은 그대로이고, 아무도 순위를 바꿀 수 없습니다.`;
+       게시글이 지워져도 이 화면은 그대로이고, 아무도 순위를 바꿀 수 없습니다.` +
+      (PINNOTEXT ? `<br>지원서 내용은 담기지 않았습니다 — 순위만 남긴 주소입니다.` : '');
     return;
   }
   if (!SNAP) {
@@ -848,14 +850,20 @@ function paintShare() {
      <div class="btns">
        <button id="shlive" class="primary">보는 사람용 주소 복사</button>
        <button id="shpin" class="primary">완전 고정 주소 복사</button>
+       <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+         <input type="checkbox" id="pintext" checked style="margin:0"> 지원서 내용도 담기
+       </label>
        <span id="pinlen" style="color:var(--dim)"></span>
+       <span id="pinsave" style="color:var(--dim)"></span>
      </div>
      · <b>보는 사람용</b> — ${SNAP
         ? '마감한 순위를 보여 줍니다. 마감을 풀면 그 주소도 같이 풀립니다.'
         : '<b>지금</b> 순위를 보여 줍니다. 좋아요가 바뀌면 순위도 따라 바뀝니다.'}
        받은 사람이 새로고침을 할 수 있습니다.<br>
      · <b>완전 고정</b> — 지금 이 화면을 <b>통째로 굳혀서</b> 줍니다.
-       게시글이 지워져도 그대로이고 무슨 수를 써도 안 바뀝니다. 대신 주소가 깁니다.`;
+       게시글이 지워져도 그대로이고 무슨 수를 써도 안 바뀝니다.
+       주소가 긴 이유는 <b>지원서 내용이 다 들어가서</b>입니다 —
+       순위만 보여 줄 거면 <b>지원서 내용도 담기</b> 를 끄세요.`;
   paintPinInfo();
 
   const live = $('#shlive');
@@ -866,11 +874,14 @@ function paintShare() {
     });
   });
 
+  const cb = $('#pintext');
+  cb.addEventListener('change', paintPinInfo);
+
   const pb = $('#shpin');
   pb.addEventListener('click', async () => {
     pb.disabled = true; pb.textContent = '만드는 중…';
     try {
-      const url = PINURL || await makePin();
+      const url = pinPicked() || await makePin(wantText());
       await navigator.clipboard.writeText(url);
       pb.textContent = '복사했습니다 (' + fmt(url.length) + '자)';
     } catch (e) { pb.textContent = '복사하지 못했습니다'; }
@@ -912,7 +923,9 @@ function paintTable(people, n, hit) {
   // 전원이 확인된 글에서는 '확인' 칸이 통째로 비어 있게 된다. 그런 칸은
   // 아예 내보내지 않는다 — 빈 칸에 머리글만 있으면 뭘 봐야 하나 싶다.
   const anyTodo = CFG.show.checked && people.some(c => !isChecked(c));
-  const cols = 5 + (CFG.show.followers ? 1 : 0) + (anyTodo ? 1 : 0) + 1;
+  // 고정 주소에 지원서를 안 담았으면 그 칸은 통째로 비어 버린다. 안 낸다.
+  const anyText = people.some(c => (c.comment || '') || (c.photo && c.photo.url));
+  const cols = 5 + (CFG.show.followers ? 1 : 0) + (anyTodo ? 1 : 0) + (anyText ? 1 : 0);
   const rows = [];
   people.forEach((c, i) => {
     const rank = i + 1;
@@ -954,7 +967,7 @@ function paintTable(people, n, hit) {
         ? `<td class="r hidesm" data-fan="${esc(c.userId)}" style="color:var(--mut)">…</td>` : ''}
       ${anyTodo ? `<td class="hidesm">${isChecked(c) ? ''
         : '<span class="chip todo">미확인</span>'}</td>` : ''}
-      <td class="peek hidesm">${hasPic ? '📷 ' : ''}${esc(peek.slice(0, 44))}</td>
+      ${anyText ? `<td class="peek hidesm">${hasPic ? '📷 ' : ''}${esc(peek.slice(0, 44))}</td>` : ''}
     </tr>`);
   });
 
@@ -962,10 +975,12 @@ function paintTable(people, n, hit) {
     ? `<div class="tblwrap"><table class="tbl"><thead><tr>
          <th class="r">순위</th><th>닉네임</th><th class="hidesm"></th><th class="hidesm">아이디</th>
          <th class="r">좋아요</th>${CFG.show.followers ? '<th class="r hidesm">팔로워</th>' : ''}
-         ${anyTodo ? '<th class="hidesm">확인</th>' : ''}<th class="hidesm">지원서</th>
+         ${anyTodo ? '<th class="hidesm">확인</th>' : ''}
+         ${anyText ? '<th class="hidesm">지원서</th>' : ''}
        </tr></thead><tbody>${rows.join('')}</tbody></table></div>
        ${cutNote(people, n) ? `<div class="cutnote">${cutNote(people, n)}</div>` : ''}
-       <div class="hint">줄을 누르면 그 사람 지원서가 열립니다.
+       <div class="hint">${anyText ? '줄을 누르면 그 사람 지원서가 열립니다.'
+         : '이 고정 주소에는 <b>지원서 내용이 담겨 있지 않습니다</b> — 순위만 남긴 주소입니다.'}
          ${ADMIN.on ? '관리자 버튼은 <b>지원서 보기</b> 쪽에 있습니다.' : ''}</div>`
     : `<div class="empty">${people.length ? '찾는 사람이 없습니다.' : '이 글에는 아직 댓글이 없습니다.'}</div>`;
 
@@ -1269,6 +1284,7 @@ function downloadXlsx() {
 // SOOP 가 API 를 바꿔도 그 화면은 그대로다. 대신 주소가 길다.
 
 // SOOP 프로필 사진 주소는 아이디에서 그대로 나온다 — 담지 않고 되살린다.
+const SHOT = 'https://stimg.sooplive.com/COMMENT/';
 const PROFILE = (id) =>
   'https://profile.img.sooplive.com/LOGO/' + id.slice(0, 2) + '/' + id + '/' + id + '.jpg';
 
@@ -1300,12 +1316,12 @@ async function unsqueeze(bytes, z) {
   return new TextDecoder().decode(await new Response(s).arrayBuffer());
 }
 
-async function makePin() {
+async function makePin(withText) {
   const people = ranked();
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
   const at = Math.floor((SNAP ? SNAP.at : (STATE.when || new Date())).getTime() / 1000);
   const obj = {
-    v: 1, at, b: STATE.bid, o: STATE.no, n,
+    v: 1, at, b: STATE.bid, o: STATE.no, n, nt: withText ? 0 : 1,
     p: people.map(c => {
       const f = STATE.fans[c.userId] || {};
       const r = { i: c.userId, k: c.userNick || '', l: c.likeCnt || 0 };
@@ -1315,8 +1331,11 @@ async function makePin() {
       if (g) r.g = g;
       if (isChecked(c)) r.c = 1;
       if (c.regDate) r.d = c.regDate;
-      if (c.comment) r.t = c.comment;
-      if (c.photo && c.photo.url) r.h = c.photo.url;
+      if (withText && c.comment) r.t = c.comment;
+      if (c.photo && c.photo.url) {
+        const u = c.photo.url;
+        r.h = u.startsWith(SHOT) ? u.slice(SHOT.length) : ('=' + u);
+      }
       if (c.profileImage && c.profileImage !== PROFILE(c.userId)) r.a = c.profileImage;
       return r;
     }),
@@ -1340,10 +1359,12 @@ async function loadPin(str) {
       userId: r.i, userNick: r.k || '', likeCnt: r.l || 0,
       nowCnt: r.w == null ? null : r.w, bjlike: r.c ? 1 : 0,
       regDate: r.d || '', comment: r.t || '',
-      photo: r.h ? { url: r.h } : null, profileImage: r.a || PROFILE(r.i),
+      photo: r.h ? { url: r.h[0] === '=' ? r.h.slice(1) : SHOT + r.h } : null,
+      profileImage: r.a || PROFILE(r.i),
     };
   });
   PINAT = new Date((o.at || 0) * 1000);
+  PINNOTEXT = !!o.nt;
   STATE = {
     bid: o.b, no: o.o, post: null, postWhy: '', people, fans, when: PINAT,
     info: { deadline: null, deadlineLine: '', countLine: '', count: null, pass: '' },
@@ -1353,15 +1374,28 @@ async function loadPin(str) {
 
 // 버튼을 누르는 순간에 만들면 클립보드 권한이 날아갈 수 있으므로 미리 만들어 둔다.
 function refreshPin() {
-  if (PIN || !STATE.people.length) { PINURL = null; return; }
+  if (PIN || !STATE.people.length) { PINURL = PINSHORT = null; return; }
   const mine = ++PINSEQ;
-  makePin().then(u => { if (mine === PINSEQ) { PINURL = u; paintPinInfo(); } })
-           .catch(() => { PINURL = null; });
+  Promise.all([makePin(true), makePin(false)]).then(([a, b]) => {
+    if (mine !== PINSEQ) return;
+    PINURL = a; PINSHORT = b; paintPinInfo();
+  }).catch(() => { PINURL = PINSHORT = null; });
 }
+
+const wantText = () => { const c = $('#pintext'); return !c || c.checked; };
+const pinPicked = () => (wantText() ? PINURL : PINSHORT);
 
 function paintPinInfo() {
   const el = $('#pinlen');
-  if (el) el.textContent = PINURL ? '주소 길이 ' + fmt(PINURL.length) + '자' : '';
+  if (!el) return;
+  const u = pinPicked();
+  el.textContent = u ? '주소 길이 ' + fmt(u.length) + '자' : '재는 중…';
+  const hint = $('#pinsave');
+  if (hint) {
+    hint.textContent = (PINURL && PINSHORT && PINURL.length > PINSHORT.length)
+      ? '끄면 ' + fmt(PINSHORT.length) + '자로 줄어듭니다'
+      : '';
+  }
 }
 
 // 남에게 줄 주소. 관리자 모드는 빼고, 뽑을 인원은 지금 값 그대로 못 박는다.
