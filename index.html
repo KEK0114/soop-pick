@@ -787,8 +787,7 @@ function paintSnap() {
   btn.classList.add('primary');
   $('#snapshare').addEventListener('click', () => {
     const b = $('#snapshare');
-    const u = new URL(location.href); u.searchParams.delete('admin');
-    navigator.clipboard.writeText(u.toString()).then(() => {
+    navigator.clipboard.writeText(shareUrl()).then(() => {
       b.textContent = '복사했습니다';
       setTimeout(() => { b.textContent = '이 순위 그대로 주소 복사'; }, 1500);
     });
@@ -803,8 +802,6 @@ function paintAdmin() {
   const bar = $('#admbar');
   if (!ADMIN.on) { bar.style.display = 'none'; return; }
   bar.style.display = '';
-  const share = new URL(location.href);
-  share.searchParams.delete('admin');       // 남에게 줄 때는 관리자 모드를 뺀다
   bar.innerHTML =
     `<b>관리자 모드</b> — 각 줄의 <b>확정</b>·<b>제외</b>를 누르면 순위가 바뀝니다. ` +
     `고른 것은 주소에 담기므로 저장할 필요가 없습니다.<br>` +
@@ -816,7 +813,7 @@ function paintAdmin() {
      </div>`;
   const sb = $('#admshare');
   if (sb) sb.addEventListener('click', () => {
-    navigator.clipboard.writeText(share.toString()).then(() => {
+    navigator.clipboard.writeText(shareUrl()).then(() => {
       sb.textContent = '복사했습니다';
       setTimeout(() => { sb.textContent = '보는 사람용 주소 복사'; }, 1500);
     });
@@ -980,13 +977,23 @@ function syncUrl() {
       `https://www.sooplive.com/station/${STATE.bid}/post/${STATE.no}`);
   }
   const n = parseInt($('#n').value, 10);
-  if (n > 0) u.searchParams.set('n', n); else u.searchParams.delete('n');
+  if (n > 0 && n !== CFG.defaultPickCount) u.searchParams.set('n', n);
+  else u.searchParams.delete('n');
   if (ADMIN.ex.size) u.searchParams.set('ex', [...ADMIN.ex].join(',')); else u.searchParams.delete('ex');
   if (ADMIN.fix.size) u.searchParams.set('fix', [...ADMIN.fix].join(',')); else u.searchParams.delete('fix');
   if (VIEW !== 'table') u.searchParams.set('view', VIEW); else u.searchParams.delete('view');
   if (SNAP && SNAP.raw) u.searchParams.set('snap', SNAP.raw);
   else u.searchParams.delete('snap');
   history.replaceState(null, '', u);
+}
+
+// 남에게 줄 주소. 관리자 모드는 빼고, 뽑을 인원은 지금 값 그대로 못 박는다.
+function shareUrl() {
+  const u = new URL(location.href);
+  u.searchParams.delete('admin');
+  const n = parseInt($('#n').value, 10);
+  if (n > 0) u.searchParams.set('n', n);
+  return u.toString();
 }
 
 function start() {
