@@ -313,6 +313,8 @@ let ONLY_TODO = false;         // '아직 확인 안 한 것만' 켜져 있나
 // 버튼을 아예 안 보여 준다. 주소에 붙는 표시일 뿐이라 자물쇠는 아니다 —
 // 헷갈려서 잘못 누르는 것을 막는 용도다.
 let RO = false;
+// 결과가 통째로 주소에 담겨 온 경우. SOOP 를 한 번도 안 부른다.
+let PIN = false, PINAT = null, PINURL = null, PINSEQ = 0;
 
 function say(text, kind) {
   const m = $('#msg');
@@ -390,6 +392,7 @@ async function load(bid, no) {
     render();
     paintSnap();
     paintAdmin();
+    refreshPin();
     fetchFans();
   } catch (e) {
     say('불러오지 못했습니다 — ' + e.message +
@@ -420,6 +423,7 @@ async function fetchFans() {
     paintFans();
     if (i + 12 < ids.length) await new Promise(r => setTimeout(r, 120));
   }
+  refreshPin();          // 팔로워·등급까지 담아서 다시 만든다
 }
 
 function paintFans() {
@@ -576,9 +580,9 @@ function render() {
          <a class="open" href="https://www.sooplive.com/station/${esc(STATE.bid)}/post/${esc(STATE.no)}"
             target="_blank" rel="noopener">게시글 열기 ↗</a>
        </div>
-       <div class="hint" style="margin-top:9px">글 제목과 본문은 못 읽었습니다${
+       ${PIN ? '' : `<div class="hint" style="margin-top:9px">글 제목과 본문은 못 읽었습니다${
          STATE.postWhy ? ' — <b>' + esc(STATE.postWhy) + '</b>' : ''}.
-         <b>댓글은 읽히므로 순위는 아래에 그대로 나옵니다.</b></div>`;
+         <b>댓글은 읽히므로 순위는 아래에 그대로 나옵니다.</b></div>`}`;
     $('#listbox').style.display = '';
     paintList();
     return;
@@ -773,6 +777,15 @@ function paintSnap() {
   const bar = $('#snapbar');
   const btn = $('#freeze');
   btn.title = '';
+  if (PIN) {
+    bar.style.display = '';
+    bar.className = 'readbox';
+    bar.innerHTML =
+      `🔒 <b>${esc(PINAT ? PINAT.toLocaleString('ko-KR') : '')} 에 고정된 순위</b>입니다.
+       결과가 이 주소 안에 통째로 들어 있어 <b>SOOP 를 다시 부르지 않습니다</b> —
+       게시글이 지워져도 이 화면은 그대로이고, 아무도 순위를 바꿀 수 없습니다.`;
+    return;
+  }
   if (!SNAP) {
     btn.textContent = '지금으로 마감';
     btn.title = '모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.';
@@ -804,8 +817,16 @@ function paintSnap() {
     `<div class="warn" style="margin-top:7px">이 마감 결과는 <b>지금 이 주소 안에</b> 들어 있습니다.
        어디에도 저장되지 않으므로 <b>창을 닫으면 사라집니다.</b>
        나중에 다시 보거나 남에게 줄 거면 아래 버튼으로 주소를 복사해 두세요.</div>`) +
+    (RO ? '' :
+    `<div class="hint" style="margin-top:9px;color:#8fa8c8">
+       <b>완전 고정 주소</b>는 결과를 주소 안에 통째로 담습니다 —
+       받은 사람 화면은 SOOP 를 다시 부르지 않아 <b>게시글이 지워져도 그대로</b>이고,
+       새로고침으로도 안 바뀝니다. 대신 주소가 깁니다.
+       <span id="pinlen" style="color:var(--dim)"></span>
+     </div>`) +
     `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
        <button id="snapshare" class="primary">이 순위 그대로 주소 복사</button>
+       ${RO ? '' : '<button id="pinshare" class="primary">완전 고정 주소 복사</button>'}
        ${RO ? '' : '<button id="snapoff">마감 풀기</button>'}
      </div>`;
   btn.textContent = '마감됨';
@@ -817,6 +838,19 @@ function paintSnap() {
       setTimeout(() => { b.textContent = '이 순위 그대로 주소 복사'; }, 1500);
     });
   });
+  paintPinInfo();
+  const pb = $('#pinshare');
+  if (pb) pb.addEventListener('click', async () => {
+    const back = pb.textContent;
+    pb.disabled = true; pb.textContent = '만드는 중…';
+    try {
+      const url = PINURL || await makePin();
+      await navigator.clipboard.writeText(url);
+      pb.textContent = '복사했습니다 (' + fmt(url.length) + '자)';
+    } catch (e) { pb.textContent = '복사하지 못했습니다'; }
+    setTimeout(() => { pb.disabled = false; pb.textContent = back; }, 2600);
+  });
+
   const off = $('#snapoff');
   if (off) off.addEventListener('click', () => {
     SNAP = null; syncUrl(); render(); paintSnap(); paintAdmin();
@@ -998,6 +1032,7 @@ function closeDetail() { $('#ov').classList.remove('on'); }
 
 // ─────────────────────────────────────────────────────────── 주소 = 상태
 function syncUrl() {
+  if (PIN) return;                 // 고정 주소는 손대지 않는다
   const u = new URL(location.href);
   if (STATE.bid) {
     u.searchParams.set('post',
@@ -1089,7 +1124,8 @@ function sheetData() {
 
   const head = ['순위', '뽑힘', '닉네임', '아이디', '좋아요'];
   const width = [6, 6, 18, 16, 8];
-  if (SNAP) { head.push('지금 좋아요'); width.push(11); }
+  const hasNow = people.some(c => c.nowCnt != null && c.nowCnt !== c.likeCnt);
+  if (hasNow) { head.push('지금 좋아요'); width.push(11); }
   if (CFG.show.followers) { head.push('팔로워'); width.push(9); }
   head.push('스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소');
   width.push(12, 12, 6, 18, 60, 34, 34);
@@ -1099,7 +1135,7 @@ function sheetData() {
     const f = STATE.fans[c.userId] || {};
     const r = [i + 1, (n > 0 && i < n) ? 'O' : '', c.userNick || '', c.userId || '',
                c.likeCnt || 0];
-    if (SNAP) r.push(c.nowCnt == null ? (c.likeCnt || 0) : c.nowCnt);
+    if (hasNow) r.push(c.nowCnt == null ? (c.likeCnt || 0) : c.nowCnt);
     if (CFG.show.followers) r.push(f.fan == null ? '' : f.fan);
     r.push(isChecked(c) ? 'O' : '',
            [f.partner ? '파트너 BJ' : '', f.best ? '베스트 BJ' : ''].filter(Boolean).join(' '),
@@ -1113,7 +1149,8 @@ function sheetData() {
 
   // 파일만 따로 돌아다녀도 언제 것인지 알 수 있어야 한다.
   const foot = [[], ['기준',
-    SNAP ? SNAP.at.toLocaleString('ko-KR') + ' 로 마감한 순위'
+    PIN ? PINAT.toLocaleString('ko-KR') + ' 에 고정된 순위'
+    : SNAP ? SNAP.at.toLocaleString('ko-KR') + ' 로 마감한 순위'
          : (STATE.when ? STATE.when.toLocaleString('ko-KR') + ' 에 받아 온 지금 순위' : '')],
     ['게시글', 'https://www.sooplive.com/station/' + STATE.bid + '/post/' + STATE.no]];
   if (ADMIN.ex.size) foot.push(['제외한 사람', ADMIN.ex.size + '명']);
@@ -1202,7 +1239,7 @@ function xlsxBlob() {
 
 function downloadXlsx() {
   if (!STATE.people.length) return;
-  const stamp = (SNAP ? SNAP.at : new Date());
+  const stamp = (PIN ? PINAT : SNAP ? SNAP.at : new Date());
   const pad = (x) => String(x).padStart(2, '0');
   const name = '좋아요순위_' + STATE.bid + '_' + STATE.no + '_' +
     stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) +
@@ -1214,6 +1251,100 @@ function downloadXlsx() {
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }
 
+
+// ─────────────────────────────────────────────────────────── 완전 고정 주소
+// 좋아요만 담는 마감(snap) 과 달리, 여기서는 **결과를 통째로** 주소에 담는다.
+// 그 주소로 들어오면 SOOP 를 한 번도 부르지 않는다 — 게시글이 지워져도,
+// SOOP 가 API 를 바꿔도 그 화면은 그대로다. 대신 주소가 길다.
+
+const B64U = {
+  enc(bytes) {
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s).split('+').join('-').split('/').join('_').split('=').join('');
+  },
+  dec(str) {
+    let t = str.split('-').join('+').split('_').join('/');
+    while (t.length % 4) t += '=';
+    const bin = atob(t), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  },
+};
+
+// 브라우저가 압축을 못 하면 안 하고 넘긴다(주소만 길어질 뿐 되기는 된다).
+async function squeeze(text) {
+  const raw = new TextEncoder().encode(text);
+  if (typeof CompressionStream !== 'function') return { z: 0, b: raw };
+  const s = new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return { z: 1, b: new Uint8Array(await new Response(s).arrayBuffer()) };
+}
+async function unsqueeze(bytes, z) {
+  if (!z) return new TextDecoder().decode(bytes);
+  const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new TextDecoder().decode(await new Response(s).arrayBuffer());
+}
+
+async function makePin() {
+  const people = ranked();
+  const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+  const at = Math.floor((SNAP ? SNAP.at : (STATE.when || new Date())).getTime() / 1000);
+  const obj = {
+    v: 1, at, b: STATE.bid, o: STATE.no, n,
+    p: people.map(c => {
+      const f = STATE.fans[c.userId] || {};
+      const r = { i: c.userId, k: c.userNick || '', l: c.likeCnt || 0 };
+      if (c.nowCnt != null && c.nowCnt !== c.likeCnt) r.w = c.nowCnt;
+      if (f.fan != null) r.f = f.fan;
+      const g = (f.best ? 1 : 0) + (f.partner ? 2 : 0);
+      if (g) r.g = g;
+      if (isChecked(c)) r.c = 1;
+      if (c.regDate) r.d = c.regDate;
+      if (c.comment) r.t = c.comment;
+      if (c.photo && c.photo.url) r.h = c.photo.url;
+      if (c.profileImage) r.a = c.profileImage;
+      return r;
+    }),
+  };
+  const out = await squeeze(JSON.stringify(obj));
+  const u = new URL(location.href);
+  for (const k of ['post', 'snap', 'n', 'ex', 'fix', 'admin', 'ro']) u.searchParams.delete(k);
+  u.searchParams.set('pin', (out.z ? '1' : '0') + B64U.enc(out.b));
+  return u.toString();
+}
+
+async function loadPin(str) {
+  const o = JSON.parse(await unsqueeze(B64U.dec(str.slice(1)), str[0] === '1'));
+  const fans = {};
+  const people = (o.p || []).map(r => {
+    fans[r.i] = { fan: r.f == null ? null : r.f, best: !!(r.g & 1), partner: !!(r.g & 2) };
+    return {
+      userId: r.i, userNick: r.k || '', likeCnt: r.l || 0,
+      nowCnt: r.w == null ? null : r.w, bjlike: r.c ? 1 : 0,
+      regDate: r.d || '', comment: r.t || '',
+      photo: r.h ? { url: r.h } : null, profileImage: r.a || '',
+    };
+  });
+  PINAT = new Date((o.at || 0) * 1000);
+  STATE = {
+    bid: o.b, no: o.o, post: null, postWhy: '', people, fans, when: PINAT,
+    info: { deadline: null, deadlineLine: '', countLine: '', count: null, pass: '' },
+  };
+  if (o.n) $('#n').value = o.n;
+}
+
+// 버튼을 누르는 순간에 만들면 클립보드 권한이 날아갈 수 있으므로 미리 만들어 둔다.
+function refreshPin() {
+  if (PIN || !STATE.people.length) { PINURL = null; return; }
+  const mine = ++PINSEQ;
+  makePin().then(u => { if (mine === PINSEQ) { PINURL = u; paintPinInfo(); } })
+           .catch(() => { PINURL = null; });
+}
+
+function paintPinInfo() {
+  const el = $('#pinlen');
+  if (el) el.textContent = PINURL ? '주소 길이 ' + fmt(PINURL.length) + '자' : '';
+}
 
 // 남에게 줄 주소. 관리자 모드는 빼고, 뽑을 인원은 지금 값 그대로 못 박는다.
 function shareUrl() {
@@ -1249,7 +1380,7 @@ $('#freeze').addEventListener('click', () => {
     if (!confirm('이미 마감했습니다. 지금 값으로 다시 마감할까요?')) return;
   }
   SNAP = readSnap(makeSnap(STATE.people));
-  syncUrl(); render(); paintSnap(); paintAdmin();
+  syncUrl(); render(); paintSnap(); paintAdmin(); refreshPin();
 });
 $('#todo').addEventListener('click', () => {
   ONLY_TODO = !ONLY_TODO;
@@ -1316,11 +1447,15 @@ function applyReadOnly() {
   ADMIN.on = false;
   $('#inbox').style.display = 'none';       // 주소 붙여넣기 · 뽑을 인원 · 불러오기
   $('#freeze').style.display = 'none';      // 마감
+  if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   document.querySelector('.sub').innerHTML =
     (CFG.subtitle ? CFG.subtitle + '<br>' : '') +
-    '스트리머가 공유한 순위입니다. <b>보기 전용</b>이라 다른 글을 불러오거나 ' +
-    '마감을 바꿀 수는 없고, <b>새로고침</b>과 <b>엑셀로 내려받기</b>는 됩니다.';
+    (PIN
+      ? '스트리머가 <b>고정해서 공유한 순위</b>입니다. 이 화면은 더 이상 바뀌지 않습니다. ' +
+        '<b>엑셀로 내려받기</b>는 됩니다.'
+      : '스트리머가 공유한 순위입니다. <b>보기 전용</b>이라 다른 글을 불러오거나 ' +
+        '마감을 바꿀 수는 없고, <b>새로고침</b>과 <b>엑셀로 내려받기</b>는 됩니다.');
 }
 
 // 주소에 게시글이 들어 있으면 바로 연다 (남에게 링크를 줬을 때)
@@ -1334,9 +1469,24 @@ function applyReadOnly() {
   if (q.get('view') === 'card') VIEW = 'card';
   if (q.get('snap')) SNAP = readSnap(q.get('snap'));
   ADMIN.on = q.get('admin') === '1';
+  const pin = q.get('pin');
+  PIN = !!pin;
   // 볼 게 있을 때만 보기 전용으로 잠근다. 빈 화면을 잠가 놓으면 아무것도 못 한다.
-  RO = q.get('ro') === '1' && !!(q.get('post') || CFG.defaultPostUrl);
+  RO = PIN || (q.get('ro') === '1' && !!(q.get('post') || CFG.defaultPostUrl));
   applyReadOnly();
+
+  if (PIN) {
+    setView(q.get('view') === 'card' ? 'card' : 'table');
+    loadPin(pin).then(() => {
+      render(); paintSnap(); paintAdmin();
+    }).catch(() => {
+      $('#snapbar').style.display = '';
+      $('#snapbar').className = 'readbox';
+      $('#snapbar').innerHTML = '<b class="warn">이 주소를 알아보지 못했습니다.</b> ' +
+        '주소가 중간에 잘렸을 수 있습니다 — 준 사람에게 전체 주소를 다시 받아 보세요.';
+    });
+    return;
+  }
   (q.get('ex') || '').split(',').filter(Boolean).forEach(x => ADMIN.ex.add(x));
   (q.get('fix') || '').split(',').filter(Boolean).forEach(x => ADMIN.fix.add(x));
 
