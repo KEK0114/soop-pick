@@ -244,7 +244,7 @@
       <button id="todo">아직 확인 안 한 것만</button>
       <input type="text" id="q" placeholder="닉네임 · 아이디 · 내용으로 찾기" style="flex:1;min-width:180px">
       <button id="copy">뽑힌 사람 복사</button>
-      <button id="xls" title="지금 순위를 그대로 표 파일로 내려받습니다. 엑셀에서 바로 열립니다.">엑셀로 내려받기</button>
+      <button id="xls" title="지금 순위를 그대로 엑셀 파일(.xlsx)로 내려받습니다.">엑셀로 내려받기</button>
       <button id="reload">새로고침</button>
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
       <span class="n" id="count"></span>
@@ -1007,30 +1007,91 @@ function syncUrl() {
 }
 
 // ─────────────────────────────────────────────────────────── 엑셀로 내려받기
-// 엑셀은 CSV 를 UTF-8 로 안 읽는다. 앞에 BOM 을 붙여야 한글이 안 깨진다.
-// 쉼표·따옴표·줄바꿈이 든 칸은 따옴표로 감싸고 따옴표는 두 번 쓴다.
-const CRLF = String.fromCharCode(13, 10);
-const NL   = String.fromCharCode(10);
-const BOM  = String.fromCharCode(0xFEFF);
-const csvCell = (v) => {
-  const t = (v == null ? '' : String(v));
-  const bad = t.indexOf(',') >= 0 || t.indexOf('"') >= 0 ||
-              t.indexOf(NL) >= 0 || t.indexOf(String.fromCharCode(13)) >= 0;
-  return bad ? '"' + t.replace(/"/g, '""') + '"' : t;
+// xlsx 는 XML 몇 장을 zip 으로 묶은 것이다. 라이브러리를 하나 더 매달면
+// 그 서버가 죽는 날 버튼만 조용히 안 먹으므로, 필요한 만큼만 여기서 만든다.
+// 압축은 안 한다(zip 의 '저장' 방식). 엑셀은 그대로 읽는다.
+
+const CRCT = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRCT[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const u16 = (n) => [n & 255, (n >> 8) & 255];
+  const u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+  const parts = [], dir = [];
+  let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), data = enc.encode(f.body);
+    const crc = crc32(data), len = data.length;
+    const head = new Uint8Array([].concat(
+      u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(33),
+      u32(crc), u32(len), u32(len), u16(nm.length), u16(0)));
+    parts.push(head, nm, data);
+    dir.push(new Uint8Array([].concat(
+      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(33),
+      u32(crc), u32(len), u32(len), u16(nm.length),
+      u16(0), u16(0), u16(0), u16(0), u32(0), u32(off))), nm);
+    off += head.length + nm.length + len;
+  }
+  const dirSize = dir.reduce((a, b) => a + b.length, 0);
+  const end = new Uint8Array([].concat(
+    u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(dirSize), u32(off), u16(0)));
+  return new Blob(parts.concat(dir, [end]),
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+// XML 에 못 넣는 제어문자를 걸러내고 &, <, > 를 바꾼다.
+function xesc(v) {
+  const t = String(v == null ? '' : v);
+  let out = '';
+  for (const ch of t) {
+    const n = ch.charCodeAt(0);
+    if (n < 32 && n !== 9 && n !== 10 && n !== 13) continue;
+    out += (ch === '&') ? '&amp;' : (ch === '<') ? '&lt;' : (ch === '>') ? '&gt;' : ch;
+  }
+  return out;
+}
+
+const colName = (i) => {
+  let s = '';
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  }
+  return s;
 };
 
-function buildCsv() {
+// 표에 담을 것. 화면의 찾기·거르기는 여기에 영향을 주지 않는다 — 전원이 들어가고,
+// 대신 '뽑힘' 칸을 두어 엑셀에서 거를 수 있게 한다.
+function sheetData() {
   const people = ranked();
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
+
   const head = ['순위', '뽑힘', '닉네임', '아이디', '좋아요'];
-  if (SNAP) head.push('지금 좋아요');
-  if (CFG.show.followers) head.push('팔로워');
+  const width = [6, 6, 18, 16, 8];
+  if (SNAP) { head.push('지금 좋아요'); width.push(11); }
+  if (CFG.show.followers) { head.push('팔로워'); width.push(9); }
   head.push('스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소');
+  width.push(12, 12, 6, 18, 60, 34, 34);
+  const applyCol = head.indexOf('지원서');
 
   const rows = people.map((c, i) => {
     const f = STATE.fans[c.userId] || {};
-    const r = [i + 1, (n > 0 && i < n) ? 'O' : '', c.userNick || '', c.userId || '', c.likeCnt || 0];
-    if (SNAP) r.push(c.nowCnt == null ? c.likeCnt || 0 : c.nowCnt);
+    const r = [i + 1, (n > 0 && i < n) ? 'O' : '', c.userNick || '', c.userId || '',
+               c.likeCnt || 0];
+    if (SNAP) r.push(c.nowCnt == null ? (c.likeCnt || 0) : c.nowCnt);
     if (CFG.show.followers) r.push(f.fan == null ? '' : f.fan);
     r.push(isChecked(c) ? 'O' : '',
            [f.partner ? '파트너 BJ' : '', f.best ? '베스트 BJ' : ''].filter(Boolean).join(' '),
@@ -1042,30 +1103,109 @@ function buildCsv() {
     return r;
   });
 
-  // 맨 아래에 언제 기준인지 남긴다. 파일만 따로 돌아다녀도 알 수 있어야 한다.
+  // 파일만 따로 돌아다녀도 언제 것인지 알 수 있어야 한다.
   const foot = [[], ['기준',
     SNAP ? SNAP.at.toLocaleString('ko-KR') + ' 로 마감한 순위'
          : (STATE.when ? STATE.when.toLocaleString('ko-KR') + ' 에 받아 온 지금 순위' : '')],
-    ['게시글', `https://www.sooplive.com/station/${STATE.bid}/post/${STATE.no}`]];
+    ['게시글', 'https://www.sooplive.com/station/' + STATE.bid + '/post/' + STATE.no]];
   if (ADMIN.ex.size) foot.push(['제외한 사람', ADMIN.ex.size + '명']);
 
-  return [head].concat(rows, foot).map(r => r.map(csvCell).join(',')).join(CRLF);
+  return { head, width, rows, foot, applyCol };
 }
 
-function downloadCsv() {
+function sheetXml(d) {
+  const cell = (v, r, ci, style) => {
+    const ref = colName(ci) + r;
+    const st = style ? ' s="' + style + '"' : '';
+    if (typeof v === 'number') return '<c r="' + ref + '"' + st + '><v>' + v + '</v></c>';
+    if (v === '' || v == null) return style ? '<c r="' + ref + '"' + st + '/>' : '';
+    return '<c r="' + ref + '" t="inlineStr"' + st +
+           '><is><t xml:space="preserve">' + xesc(v) + '</t></is></c>';
+  };
+  const line = (arr, r, headRow) => '<row r="' + r + '">' +
+    arr.map((v, ci) => cell(v, r, ci,
+      headRow ? 1 : (ci === d.applyCol ? 2 : 0))).join('') + '</row>';
+
+  let rn = 1;
+  const body = [line(d.head, rn++, true)]
+    .concat(d.rows.map(r => line(r, rn++, false)))
+    .concat(d.foot.map(r => line(r, rn++, false)));
+
+  const lastCol = colName(d.head.length - 1);
+  const cols = d.width.map((w, i) =>
+    '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('');
+
+  return XMLDECL +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
+    '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
+    '</sheetView></sheetViews>' +
+    '<sheetFormatPr defaultRowHeight="15"/>' +
+    '<cols>' + cols + '</cols>' +
+    '<sheetData>' + body.join('') + '</sheetData>' +
+    '<autoFilter ref="A1:' + lastCol + (d.rows.length + 1) + '"/>' +
+    '</worksheet>';
+}
+
+const XMLDECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+const RELNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+function xlsxBlob() {
+  const d = sheetData();
+  return zipStore([
+    { name: '[Content_Types].xml', body: XMLDECL +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '</Types>' },
+    { name: '_rels/.rels', body: XMLDECL +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="' + RELNS + '/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>' },
+    { name: 'xl/workbook.xml', body: XMLDECL +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+      'xmlns:r="' + RELNS + '"><sheets>' +
+      '<sheet name="좋아요 순위" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', body: XMLDECL +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="' + RELNS + '/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="' + RELNS + '/styles" Target="styles.xml"/>' +
+      '</Relationships>' },
+    { name: 'xl/styles.xml', body: XMLDECL +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="2"><font><sz val="11"/><name val="맑은 고딕"/></font>' +
+      '<font><b/><sz val="11"/><name val="맑은 고딕"/></font></fonts>' +
+      '<fills count="2"><fill><patternFill patternType="none"/></fill>' +
+      '<fill><patternFill patternType="gray125"/></fill></fills>' +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf/></cellStyleXfs>' +
+      '<cellXfs count="3"><xf xfId="0"/>' +
+      '<xf xfId="0" fontId="1" applyFont="1"/>' +
+      '<xf xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+      '</cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+      '</styleSheet>' },
+    { name: 'xl/worksheets/sheet1.xml', body: sheetXml(d) },
+  ]);
+}
+
+function downloadXlsx() {
   if (!STATE.people.length) return;
   const stamp = (SNAP ? SNAP.at : new Date());
   const pad = (x) => String(x).padStart(2, '0');
-  const name = `좋아요순위_${STATE.bid}_${STATE.no}_` +
-    `${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}` +
-    `_${pad(stamp.getHours())}${pad(stamp.getMinutes())}.csv`;
-  const blob = new Blob([BOM + buildCsv()], { type: 'text/csv;charset=utf-8' });
+  const name = '좋아요순위_' + STATE.bid + '_' + STATE.no + '_' +
+    stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) +
+    '_' + pad(stamp.getHours()) + pad(stamp.getMinutes()) + '.xlsx';
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(xlsxBlob());
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }
+
 
 // 남에게 줄 주소. 관리자 모드는 빼고, 뽑을 인원은 지금 값 그대로 못 박는다.
 function shareUrl() {
@@ -1118,7 +1258,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft')  { const b = $('#dprev'); if (b && !b.disabled) b.click(); }
 });
 
-$('#xls').addEventListener('click', downloadCsv);
+$('#xls').addEventListener('click', downloadXlsx);
 $('#go').addEventListener('click', start);
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
 $('#reload').addEventListener('click', () => {
