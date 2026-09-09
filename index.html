@@ -762,6 +762,9 @@ function paintSnap() {
     (after ? `그 뒤에 달린 댓글 <b>${fmt(after)}개</b>는 뺐습니다. ` : '') +
     (moved ? `<b>${fmt(moved)}명</b>은 그 뒤로 좋아요가 바뀌었습니다(옆에 '지금 ○' 로 적었습니다).`
            : '고정한 뒤로 바뀐 사람은 없습니다.') +
+    `<div class="warn" style="margin-top:7px">이 고정은 <b>지금 이 주소 안에</b> 들어 있습니다.
+       어디에도 저장되지 않으므로 <b>창을 닫으면 사라집니다.</b>
+       나중에 다시 보거나 남에게 줄 거면 아래 버튼으로 주소를 복사해 두세요.</div>` +
     `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
        <button id="snapshare" class="primary">이 순위 그대로 주소 복사</button>
        <button id="snapoff">고정 풀기</button>
