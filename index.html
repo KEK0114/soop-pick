@@ -393,6 +393,7 @@ async function load(bid, no) {
     paintSnap();
     paintAdmin();
     refreshPin();
+    paintShare();
     fetchFans();
   } catch (e) {
     say('불러오지 못했습니다 — ' + e.message +
@@ -424,6 +425,7 @@ async function fetchFans() {
     if (i + 12 < ids.length) await new Promise(r => setTimeout(r, 120));
   }
   refreshPin();          // 팔로워·등급까지 담아서 다시 만든다
+  paintShare();
 }
 
 function paintFans() {
@@ -1387,7 +1389,7 @@ $('#freeze').addEventListener('click', () => {
     if (!confirm('이미 마감했습니다. 지금 값으로 다시 마감할까요?')) return;
   }
   SNAP = readSnap(makeSnap(STATE.people));
-  syncUrl(); render(); paintSnap(); paintAdmin(); refreshPin();
+  syncUrl(); render(); paintSnap(); paintAdmin(); refreshPin(); paintShare();
 });
 $('#todo').addEventListener('click', () => {
   ONLY_TODO = !ONLY_TODO;
