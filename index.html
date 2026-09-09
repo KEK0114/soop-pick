@@ -1392,9 +1392,10 @@ function paintPinInfo() {
   el.textContent = u ? '주소 길이 ' + fmt(u.length) + '자' : '재는 중…';
   const hint = $('#pinsave');
   if (hint) {
-    hint.textContent = (PINURL && PINSHORT && PINURL.length > PINSHORT.length)
-      ? '끄면 ' + fmt(PINSHORT.length) + '자로 줄어듭니다'
-      : '';
+    hint.textContent =
+      (!PINURL || !PINSHORT || PINURL.length <= PINSHORT.length) ? ''
+      : wantText() ? '끄면 ' + fmt(PINSHORT.length) + '자로 줄어듭니다'
+      : '지원서 없이 순위만 담깁니다 (켜면 ' + fmt(PINURL.length) + '자)';
   }
 }
 
