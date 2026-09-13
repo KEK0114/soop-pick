@@ -11,10 +11,32 @@ import { createHash } from 'node:crypto';
 
 const MAX = 400 * 1024;          // 400KB. 82명 글이 25KB 였으니 넉넉하다.
 
+// 관리자 코드. Vercel 환경변수 PICK_CODE 에 넣어 둔다 — 파일에는 안 남는다.
+// 안 넣어 두면 아무나 쓸 수 있다(예전 그대로). 넣는 순간 잠긴다.
+const CODE = process.env.PICK_CODE || '';
+
+// 길이가 달라도 같은 시간이 걸리게 견준다. 한 글자씩 맞춰 보며 코드를
+// 알아내는 짓을 막는다.
+function same(a, b) {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+const allowed = (req) => !CODE || same(String(req.headers['x-pick-code'] || ''), CODE);
+
 export default async function handler(req, res) {
+  // 코드가 맞는지만 물어보는 길. 화면이 처음 열릴 때 한 번 쓴다.
+  if (req.method === 'GET') {
+    return res.status(200).json({ locked: !!CODE, ok: allowed(req) });
+  }
   if (req.method !== 'POST') {
-    res.setHeader('allow', 'POST');
+    res.setHeader('allow', 'GET, POST');
     return res.status(405).json({ error: 'POST 로 보내 주세요.' });
+  }
+  if (!allowed(req)) {
+    return res.status(401).json({ error: '관리자 코드가 있어야 주소를 만들 수 있습니다.' });
   }
 
   const body = typeof req.body === 'string' ? req.body
