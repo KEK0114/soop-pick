@@ -252,6 +252,11 @@
       <button id="xls" title="지금 순위를 그대로 엑셀 파일(.xlsx)로 내려받습니다.">엑셀로 내려받기</button>
       <button id="reload">새로고침</button>
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
+      <span id="nbox" style="display:none;align-items:center;gap:6px">
+        <span class="lbl">뽑을 인원</span>
+        <input type="number" id="n2" min="0" max="9999" style="width:74px"
+               title="여기 넣은 수만큼 위에서 자르고 그 자리에 선을 긋습니다.">
+      </span>
       <span class="n" id="count"></span>
     </div>
     <div class="sharebar" id="sharebar" style="display:none"></div>
@@ -327,6 +332,7 @@ let VSLUG = false;             // 짧은 보는 사람용 주소로 열렸는가
 // 링크로 자기 지원자를 보는 사람이라, 방송국에 안 들어가고도 마감을 굳힐 수
 // 있어야 한다. 글을 바꾸거나 사람을 고르는 것은 그대로 막는다.
 let CANFREEZE = false;
+let VN0 = null;                // 스트리머용 주소에 원래 적혀 있던 뽑을 인원
 let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
 // 짧은 주소를 만들어 주는 서버가 붙어 있는가. 저장이 안 되면 긴 주소로 떨어진다.
 const SHORTEN = CFG.shortLinks !== false;
@@ -1115,6 +1121,9 @@ function syncUrl() {
     const v = new URL(location.href);
     if (SNAP && SNAP.raw) v.searchParams.set('snap', SNAP.raw);
     else v.searchParams.delete('snap');
+    const nn = parseInt($('#n').value, 10);
+    if (CANFREEZE && nn > 0 && nn !== VN0) v.searchParams.set('n', nn);
+    else v.searchParams.delete('n');
     history.replaceState(null, '', v);
     return;
   }
@@ -1561,6 +1570,12 @@ $('#reload').addEventListener('click', () => {
   if (STATE.bid) load(STATE.bid, STATE.no);
 });
 $('#n').addEventListener('input', () => { if (STATE.people.length) paintList(); syncUrl(); });
+// 도구 줄의 인원 칸(스트리머용). 숨어 있는 진짜 칸에 옮겨 적고 다시 그린다.
+$('#n2').addEventListener('input', () => {
+  $('#n').value = $('#n2').value;
+  if (STATE.people.length) paintList();
+  syncUrl();
+});
 $('#q').addEventListener('input', () => { if (STATE.people.length) paintList(); });
 $('#copy').addEventListener('click', () => {
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
@@ -1605,6 +1620,10 @@ function applyReadOnly() {
   // 스트리머용이면 되살린다. 부팅 때 한 번 숨긴 뒤에 알게 되므로 '숨기기'만
   // 해서는 안 되고, 매번 다시 정해 줘야 한다.
   $('#freeze').style.display = CANFREEZE ? '' : 'none';
+  // 뽑을 인원도 스트리머가 고칠 수 있어야 한다. 입력 카드는 통째로 감췄으므로
+  // 도구 줄에 칸을 하나 낸다.
+  $('#nbox').style.display = CANFREEZE ? 'inline-flex' : 'none';
+  if (CANFREEZE) $('#n2').value = $('#n').value;
   if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   // 맨 아래 안내문은 '늘 최신입니다' 라고 말한다. 고정된 화면에서는 거짓말이다.
@@ -1621,7 +1640,8 @@ function applyReadOnly() {
         '<b>엑셀로 내려받기</b>는 됩니다.'
       : CANFREEZE
       ? '이 글의 지원자를 좋아요 순으로 줄 세운 화면입니다. 방송국에 들어가지 않아도 ' +
-        '여기서 그대로 보시면 됩니다. 모집이 끝나면 <b>지금으로 마감</b>을 눌러 순위를 굳히세요.'
+        '여기서 그대로 보시면 됩니다. <b>뽑을 인원</b>을 넣으면 거기에 선을 긋고, ' +
+        '모집이 끝나면 <b>지금으로 마감</b>을 눌러 순위를 굳힙니다.'
       : '스트리머가 공유한 순위입니다. <b>보기 전용</b>이라 다른 글을 불러오거나 ' +
         '마감을 바꿀 수는 없고, <b>새로고침</b>과 <b>엑셀로 내려받기</b>는 됩니다.');
 }
@@ -1654,9 +1674,11 @@ function applyReadOnly() {
     fetch('/api/pin?kind=v&id=' + encodeURIComponent(vslug))
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(o => {
-        if (o.e) { CANFREEZE = true; applyReadOnly(); }   // 마감 버튼을 되살린다
-        if (o.n) $('#n').value = o.n;
-        // 스트리머가 여기서 직접 마감했으면 그게 주소에 남아 있다. 그쪽이 우선.
+        if (o.n) { $('#n').value = o.n; VN0 = +o.n; }
+        // 스트리머가 여기서 직접 바꾼 것이 주소에 남아 있으면 그쪽이 우선이다.
+        const qn = parseInt(q.get('n'), 10);
+        if (qn > 0) $('#n').value = qn;
+        if (o.e) { CANFREEZE = true; applyReadOnly(); }   // 마감·인원 칸을 되살린다
         if (q.get('snap')) SNAP = readSnap(q.get('snap'));
         else if (o.s) SNAP = readSnap(o.s);
         (o.x || []).forEach(x => ADMIN.ex.add(x));
