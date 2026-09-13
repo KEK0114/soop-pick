@@ -1602,7 +1602,9 @@ function applyReadOnly() {
   if (!RO) return;
   ADMIN.on = false;
   $('#inbox').style.display = 'none';       // 주소 붙여넣기 · 뽑을 인원 · 불러오기
-  if (!CANFREEZE) $('#freeze').style.display = 'none';   // 마감
+  // 스트리머용이면 되살린다. 부팅 때 한 번 숨긴 뒤에 알게 되므로 '숨기기'만
+  // 해서는 안 되고, 매번 다시 정해 줘야 한다.
+  $('#freeze').style.display = CANFREEZE ? '' : 'none';
   if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   // 맨 아래 안내문은 '늘 최신입니다' 라고 말한다. 고정된 화면에서는 거짓말이다.
