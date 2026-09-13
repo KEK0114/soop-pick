@@ -252,6 +252,12 @@
       <button id="xls" title="지금 순위를 그대로 엑셀 파일(.xlsx)로 내려받습니다.">엑셀로 내려받기</button>
       <button id="reload">새로고침</button>
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
+      <span id="cutbox" style="display:none;align-items:center;gap:6px">
+        <span class="lbl">마감 시각</span>
+        <input type="datetime-local" id="cut" style="width:196px"
+               title="이 시각 뒤에 달린 댓글은 지원으로 세지 않습니다.">
+        <button id="cutoff" title="마감 시각을 지웁니다">지우기</button>
+      </span>
       <span id="nbox" style="display:none;align-items:center;gap:6px">
         <span class="lbl">뽑을 인원</span>
         <input type="number" id="n2" min="0" max="9999" style="width:74px"
@@ -260,6 +266,7 @@
       <span class="n" id="count"></span>
     </div>
     <div class="sharebar" id="sharebar" style="display:none"></div>
+    <div id="cutbar"></div>
     <div id="list"></div>
   </div>
 
@@ -333,6 +340,17 @@ let VSLUG = false;             // 짧은 보는 사람용 주소로 열렸는가
 // 있어야 한다. 글을 바꾸거나 사람을 고르는 것은 그대로 막는다.
 let CANFREEZE = false;
 let VN0 = null;                // 스트리머용 주소에 원래 적혀 있던 뽑을 인원
+// 마감 시각. **댓글을 자르는 선**이다 — 이 뒤에 달린 댓글은 지원으로 안 센다.
+// 좋아요를 그때로 되돌리는 것은 아니다. SOOP 은 '지금 몇 개' 만 알려 준다.
+let CUT = null;                // Date 또는 null
+
+// '2026-09-08 20:23:10' 을 Date 로. 사람이 넣는 칸도 같은 시간대로 읽으므로
+// 둘을 그대로 견줄 수 있다.
+const whenOf = (c) => {
+  const t = String(c.regDate || '').replace(' ', 'T');
+  const d = t ? new Date(t) : null;
+  return (d && !isNaN(d)) ? d : null;
+};
 let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
 // 짧은 주소를 만들어 주는 서버가 붙어 있는가. 저장이 안 되면 긴 주소로 떨어진다.
 const SHORTEN = CFG.shortLinks !== false;
@@ -415,6 +433,7 @@ async function load(bid, no) {
     paintAdmin();
     refreshPin();
     paintShare();
+    paintCut();
     fetchFans();
   } catch (e) {
     say('불러오지 못했습니다 — ' + e.message +
@@ -447,6 +466,7 @@ async function fetchFans() {
   }
   refreshPin();          // 팔로워·등급까지 담아서 다시 만든다
   paintShare();
+  paintCut();
 }
 
 function paintFans() {
@@ -664,6 +684,7 @@ function render() {
 // 제외한 사람은 빼고, 확정한 사람은 맨 위로 올린다. 나머지는 좋아요 순 그대로.
 function ranked() {
   let list = STATE.people;
+  if (CUT) list = list.filter(c => { const w = whenOf(c); return !w || w <= CUT; });
   if (SNAP) {
     // 마감 뒤에 달린 댓글은 지원으로 치지 않는다. 그리고 좋아요를 **마감 당시
     // 값으로 되돌려** 다시 세운다. 이걸 안 하면 마감은 이름뿐인 버튼이 된다.
@@ -686,6 +707,7 @@ function nowTag(c) {
 }
 
 function paintList() {
+  $('#cutbar').innerHTML = cutNotice();
   const people = ranked();
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
   const q = ($('#q').value || '').trim().toLowerCase();
@@ -863,6 +885,43 @@ function paintSnap() {
 
 // 남에게 주는 자리. 마감을 눌러야만 나오게 두면 찾지를 못한다 — 표 바로 위에
 // 늘 둔다. 주는 방법이 두 가지라, 무엇이 다른지도 그 자리에 적는다.
+// 'YYYY-MM-DDTHH:MM' — datetime-local 이 읽는 모양. 시간대는 보는 사람 기준.
+function cutValue(d) {
+  if (!d) return '';
+  const p = (x) => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+         'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function paintCut() {
+  const box = $('#cutbox');
+  if (!box) return;
+  // 고정된 화면에서는 이미 정해진 결과라 손댈 게 없다.
+  const can = !PIN && (!RO || CANFREEZE);
+  box.style.display = can ? 'inline-flex' : 'none';
+  if (!can) return;
+  const el = $('#cut');
+  // 아직 안 정했으면 글에서 읽어낸 마감을 **미리 적어만** 둔다(적용은 안 한다).
+  el.value = CUT ? cutValue(CUT)
+                 : (el.value || cutValue((STATE.info || {}).deadline));
+  $('#cutoff').style.display = CUT ? '' : 'none';
+}
+
+// 마감 시각이 무슨 일을 하는지, 그리고 **무슨 일을 못 하는지** 밝힌다.
+function cutNotice() {
+  if (!CUT || !STATE.people.length) return '';
+  const dropped = STATE.people.filter(c => { const w = whenOf(c); return w && w > CUT; }).length;
+  const when = CUT.toLocaleString('ko-KR');
+  const late = !SNAP && CUT < new Date();
+  return `<div class="readbox" style="margin-top:0;margin-bottom:11px">
+      ✂ <b>${esc(when)} 로 잘랐습니다.</b>
+      그 뒤에 달린 댓글 <b>${fmt(dropped)}개</b>는 지원으로 세지 않습니다.` +
+    (late ? `<div class="warn" style="margin-top:6px">
+      다만 <b>좋아요 수는 그때로 되돌릴 수 없습니다.</b> SOOP 은 지금 값만 알려 줍니다 —
+      마감 시각 뒤에 쌓인 좋아요가 섞여 있습니다.</div>` : '') +
+    `</div>`;
+}
+
 function paintShare() {
   const bar = $('#sharebar');
   if (RO || PIN || !STATE.people.length) { bar.style.display = 'none'; return; }
@@ -1124,6 +1183,8 @@ function syncUrl() {
     const nn = parseInt($('#n').value, 10);
     if (CANFREEZE && nn > 0 && nn !== VN0) v.searchParams.set('n', nn);
     else v.searchParams.delete('n');
+    if (CANFREEZE && CUT) v.searchParams.set('cut', Math.floor(CUT.getTime() / 1000));
+    else v.searchParams.delete('cut');
     history.replaceState(null, '', v);
     return;
   }
@@ -1140,6 +1201,8 @@ function syncUrl() {
   if (VIEW !== 'table') u.searchParams.set('view', VIEW); else u.searchParams.delete('view');
   if (SNAP && SNAP.raw) u.searchParams.set('snap', SNAP.raw);
   else u.searchParams.delete('snap');
+  if (CUT) u.searchParams.set('cut', Math.floor(CUT.getTime() / 1000));
+  else u.searchParams.delete('cut');
   history.replaceState(null, '', u);
 }
 
@@ -1390,6 +1453,7 @@ async function makePin(withText) {
   const at = Math.floor((SNAP ? SNAP.at : (STATE.when || new Date())).getTime() / 1000);
   const obj = {
     v: 1, at, b: STATE.bid, o: STATE.no, n, nt: withText ? 0 : 1,
+    d: CUT ? Math.floor(CUT.getTime() / 1000) : 0,
     p: people.map(c => {
       const f = STATE.fans[c.userId] || {};
       const r = { i: c.userId, k: c.userNick || '', l: c.likeCnt || 0 };
@@ -1444,6 +1508,7 @@ function usePin(o) {
   });
   PINAT = new Date((o.at || 0) * 1000);
   PINNOTEXT = !!o.nt;
+  CUT = o.d ? new Date(o.d * 1000) : null;
   STATE = {
     bid: o.b, no: o.o, post: null, postWhy: '', people, fans, when: PINAT,
     info: { deadline: null, deadlineLine: '', countLine: '', count: null, pass: '' },
@@ -1485,6 +1550,7 @@ async function shortenView(canFreeze) {
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
   const body = { v: 2, b: STATE.bid, o: STATE.no };
   if (canFreeze) body.e = 1;
+  if (CUT) body.d = Math.floor(CUT.getTime() / 1000);
   if (n > 0) body.n = n;
   if (SNAP && SNAP.raw) body.s = SNAP.raw;
   if (ADMIN.ex.size) body.x = [...ADMIN.ex];
@@ -1571,6 +1637,19 @@ $('#reload').addEventListener('click', () => {
 });
 $('#n').addEventListener('input', () => { if (STATE.people.length) paintList(); syncUrl(); });
 // 도구 줄의 인원 칸(스트리머용). 숨어 있는 진짜 칸에 옮겨 적고 다시 그린다.
+// 마감 시각 칸. 비우면 자르지 않는다.
+$('#cut').addEventListener('change', () => {
+  const v = $('#cut').value;
+  const d = v ? new Date(v) : null;
+  CUT = (d && !isNaN(d)) ? d : null;
+  if (STATE.people.length) { render(); paintSnap(); paintAdmin(); refreshPin(); paintShare(); }
+  paintCut(); syncUrl();
+});
+$('#cutoff').addEventListener('click', () => {
+  CUT = null; $('#cut').value = '';
+  if (STATE.people.length) { render(); paintSnap(); paintAdmin(); refreshPin(); paintShare(); }
+  paintCut(); syncUrl();
+});
 $('#n2').addEventListener('input', () => {
   $('#n').value = $('#n2').value;
   if (STATE.people.length) paintList();
@@ -1624,6 +1703,7 @@ function applyReadOnly() {
   // 도구 줄에 칸을 하나 낸다.
   $('#nbox').style.display = CANFREEZE ? 'inline-flex' : 'none';
   if (CANFREEZE) $('#n2').value = $('#n').value;
+  paintCut();
   if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   // 맨 아래 안내문은 '늘 최신입니다' 라고 말한다. 고정된 화면에서는 거짓말이다.
@@ -1656,6 +1736,7 @@ function applyReadOnly() {
   if (n && +n > 0) $('#n').value = +n;
   if (q.get('view') === 'card') VIEW = 'card';
   if (q.get('snap')) SNAP = readSnap(q.get('snap'));
+  if (+q.get('cut') > 0) CUT = new Date(+q.get('cut') * 1000);
   ADMIN.on = q.get('admin') === '1';
   // 고정 주소는 두 가지. 짧은 주소 '/p/<이름표>' 와, 통째로 담은 '#pin='.
   // 예전에 만든 '?pin=' 주소도 계속 받아 준다.
@@ -1675,6 +1756,8 @@ function applyReadOnly() {
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(o => {
         if (o.n) { $('#n').value = o.n; VN0 = +o.n; }
+        if (o.d) CUT = new Date(o.d * 1000);
+        if (+q.get('cut') > 0) CUT = new Date(+q.get('cut') * 1000);
         // 스트리머가 여기서 직접 바꾼 것이 주소에 남아 있으면 그쪽이 우선이다.
         const qn = parseInt(q.get('n'), 10);
         if (qn > 0) $('#n').value = qn;
