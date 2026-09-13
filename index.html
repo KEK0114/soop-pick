@@ -323,6 +323,10 @@ let RO = false;
 let PIN = false, PINAT = null, PINURL = null, PINSHORT = null, PINSEQ = 0;
 let PINSAVED = false;          // 짧은 주소(사이트에 보관)로 열렸는가
 let VSLUG = false;             // 짧은 보는 사람용 주소로 열렸는가
+// 스트리머용 주소. 보기 전용이되 **마감은 직접 할 수 있다**. 남이 만들어 준
+// 링크로 자기 지원자를 보는 사람이라, 방송국에 안 들어가고도 마감을 굳힐 수
+// 있어야 한다. 글을 바꾸거나 사람을 고르는 것은 그대로 막는다.
+let CANFREEZE = false;
 let PINNOTEXT = false;         // 고정 주소에 지원서 내용이 안 담긴 경우
 // 짧은 주소를 만들어 주는 서버가 붙어 있는가. 저장이 안 되면 긴 주소로 떨어진다.
 const SHORTEN = CFG.shortLinks !== false;
@@ -808,8 +812,10 @@ function paintSnap() {
     btn.title = '모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.';
     btn.classList.remove('primary');
     // 마감 버튼이 왜 있는지는 누르기 **전에** 알아야 한다.
-    // 다만 보기 전용으로 온 사람은 누를 수 없으니 조르지 않는다.
-    if (!STATE.people.length || RO) { bar.style.display = 'none'; return; }
+    // 다만 누를 수 없는 사람에게는 조르지 않는다.
+    if (!STATE.people.length || (RO && !CANFREEZE)) {
+      bar.style.display = 'none'; return;
+    }
     bar.style.display = '';
     bar.className = 'readbox soft';
     bar.innerHTML =
@@ -830,7 +836,11 @@ function paintSnap() {
     (after ? `그 뒤에 달린 댓글 <b>${fmt(after)}개</b>는 뺐습니다. ` : '') +
     (moved ? `<b>${fmt(moved)}명</b>은 그 뒤로 좋아요가 바뀌었습니다(옆에 '지금 ○' 로 적었습니다).`
            : '마감한 뒤로 바뀐 사람은 없습니다.') +
-    (RO ? '' :
+    (CANFREEZE ?
+    `<div class="r2" style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+       <button id="snapoff">마감 풀기</button>
+     </div>`
+     : RO ? '' :
     `<div class="warn" style="margin-top:7px">이 마감 결과는 <b>지금 이 주소 안에</b> 들어 있습니다.
        어디에도 저장되지 않으므로 <b>창을 닫으면 사라집니다.</b>
        남에게 줄 주소는 아래 <b>남에게 주기</b> 에 있습니다.</div>
@@ -852,9 +862,10 @@ function paintShare() {
   if (RO || PIN || !STATE.people.length) { bar.style.display = 'none'; return; }
   bar.style.display = '';
   bar.innerHTML =
-    `<span class="ttl">남에게 주기</span> — 주소 두 가지가 나옵니다. 둘 다 받은 사람은
-     <b>보기 전용</b>이라 다른 글을 불러오거나 마감을 건드릴 수 없습니다.
+    `<span class="ttl">남에게 주기</span> — 셋 다 받은 사람은 <b>다른 글을 불러올 수
+     없습니다</b>. 이 글의 순위만 봅니다.
      <div class="btns">
+       <button id="shbj" class="primary">스트리머용 주소 복사</button>
        <button id="shlive" class="primary">보는 사람용 주소 복사</button>
        <button id="shpin" class="primary">완전 고정 주소 복사</button>
        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
@@ -863,16 +874,31 @@ function paintShare() {
        <span id="pinlen" style="color:var(--dim)"></span>
        <span id="pinsave" style="color:var(--dim)"></span>
      </div>
+     · <b>스트리머용</b> — 글 쓴 사람에게 주는 주소입니다. 방송국에 들어가지 않아도
+       자기 지원자를 여기서 보고, <b>직접 마감</b>도 할 수 있습니다. 확정·제외는 없습니다.<br>
      · <b>보는 사람용</b> — ${SNAP
         ? '마감한 순위를 보여 줍니다. 마감을 풀면 그 주소도 같이 풀립니다.'
         : '<b>지금</b> 순위를 보여 줍니다. 좋아요가 바뀌면 순위도 따라 바뀝니다.'}
-       받은 사람이 새로고침을 할 수 있습니다.<br>
+       마감은 못 합니다.<br>
      · <b>완전 고정</b> — 지금 이 화면을 <b>통째로 굳혀서</b> 줍니다.
        게시글이 지워져도 그대로이고 무슨 수를 써도 안 바뀝니다.
        ${SHORTEN
          ? '결과는 이 사이트에 보관되고 <b>짧은 주소</b>가 나옵니다.'
          : '주소가 긴 이유는 <b>지원서 내용이 다 들어가서</b>입니다 — 순위만 보여 줄 거면 <b>지원서 내용·사진도 담기</b> 를 끄세요.'}`;
   paintPinInfo();
+
+  const bj = $('#shbj');
+  bj.addEventListener('click', async () => {
+    bj.disabled = true; bj.textContent = '만드는 중…';
+    let msg = '복사하지 못했습니다';
+    try {
+      const url = await shortenView(true);
+      await navigator.clipboard.writeText(url);
+      msg = '복사했습니다 (스트리머용)';
+    } catch (e) { msg = '만들지 못했습니다 — 잠시 뒤 다시'; }
+    bj.textContent = msg;
+    setTimeout(() => { bj.disabled = false; bj.textContent = '스트리머용 주소 복사'; }, 2600);
+  });
 
   const live = $('#shlive');
   live.addEventListener('click', async () => {
@@ -1082,7 +1108,16 @@ function closeDetail() { $('#ov').classList.remove('on'); }
 
 // ─────────────────────────────────────────────────────────── 주소 = 상태
 function syncUrl() {
-  if (PIN || VSLUG) return;        // 짧은 주소는 손대지 않는다. 도로 길어진다.
+  if (PIN) return;                 // 고정 주소는 손대지 않는다
+  if (VSLUG) {
+    // 짧은 주소는 그대로 둔다 — 도로 길어진다. 다만 스트리머가 직접 마감했으면
+    // 그것만은 주소에 남긴다. 안 그러면 새로고침 한 번에 마감이 풀린다.
+    const v = new URL(location.href);
+    if (SNAP && SNAP.raw) v.searchParams.set('snap', SNAP.raw);
+    else v.searchParams.delete('snap');
+    history.replaceState(null, '', v);
+    return;
+  }
   const u = new URL(location.href);
   if (STATE.bid) {
     u.searchParams.set('post',
@@ -1437,9 +1472,10 @@ async function shorten(pin) {
 
 // 보는 사람용 주소. 담는 것은 글 주소와 설정뿐이라 아주 작다 —
 // 순위는 그 사람 브라우저가 SOOP 에서 그때그때 받아 온다.
-async function shortenView() {
+async function shortenView(canFreeze) {
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
   const body = { v: 2, b: STATE.bid, o: STATE.no };
+  if (canFreeze) body.e = 1;
   if (n > 0) body.n = n;
   if (SNAP && SNAP.raw) body.s = SNAP.raw;
   if (ADMIN.ex.size) body.x = [...ADMIN.ex];
@@ -1566,7 +1602,7 @@ function applyReadOnly() {
   if (!RO) return;
   ADMIN.on = false;
   $('#inbox').style.display = 'none';       // 주소 붙여넣기 · 뽑을 인원 · 불러오기
-  $('#freeze').style.display = 'none';      // 마감
+  if (!CANFREEZE) $('#freeze').style.display = 'none';   // 마감
   if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   // 맨 아래 안내문은 '늘 최신입니다' 라고 말한다. 고정된 화면에서는 거짓말이다.
@@ -1581,6 +1617,9 @@ function applyReadOnly() {
     (PIN
       ? '스트리머가 <b>고정해서 공유한 순위</b>입니다. 이 화면은 더 이상 바뀌지 않습니다. ' +
         '<b>엑셀로 내려받기</b>는 됩니다.'
+      : CANFREEZE
+      ? '이 글의 지원자를 좋아요 순으로 줄 세운 화면입니다. 방송국에 들어가지 않아도 ' +
+        '여기서 그대로 보시면 됩니다. 모집이 끝나면 <b>지금으로 마감</b>을 눌러 순위를 굳히세요.'
       : '스트리머가 공유한 순위입니다. <b>보기 전용</b>이라 다른 글을 불러오거나 ' +
         '마감을 바꿀 수는 없고, <b>새로고침</b>과 <b>엑셀로 내려받기</b>는 됩니다.');
 }
@@ -1613,8 +1652,11 @@ function applyReadOnly() {
     fetch('/api/pin?kind=v&id=' + encodeURIComponent(vslug))
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(o => {
+        if (o.e) { CANFREEZE = true; applyReadOnly(); }   // 마감 버튼을 되살린다
         if (o.n) $('#n').value = o.n;
-        if (o.s) SNAP = readSnap(o.s);
+        // 스트리머가 여기서 직접 마감했으면 그게 주소에 남아 있다. 그쪽이 우선.
+        if (q.get('snap')) SNAP = readSnap(q.get('snap'));
+        else if (o.s) SNAP = readSnap(o.s);
         (o.x || []).forEach(x => ADMIN.ex.add(x));
         (o.f || []).forEach(x => ADMIN.fix.add(x));
         setView(o.w ? 'card' : 'table');
