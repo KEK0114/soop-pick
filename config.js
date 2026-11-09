@@ -46,6 +46,9 @@ window.PICK_CONFIG = {
     search: true,              // 찾기 칸
     excel: true,               // [엑셀로 내려받기] 버튼
     copyButton: true,          // 뽑힌 사람 복사
+    badges: true,              // 팬클럽·구독·서포터·열혈·매니저 표시 + '조건' 메뉴
+    joined: true,              // 방송국 가입일 (석 달 안 된 계정은 '새 계정'으로 표시)
+    commentLink: true,         // SOOP 의 그 댓글로 바로 가는 '댓글 ↗' 링크
   },
 
   // ── 맨 아래 안내문 ────────────────────────────────────────────────────
