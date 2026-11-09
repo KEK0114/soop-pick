@@ -542,6 +542,13 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('ko-KR'));
+// SOOP 은 댓글과 닉네임을 HTML 로 한 번 감싸서 준다('>' 가 '&gt;' 로). 화면에 낼 때
+// 다시 감싸므로 그대로 두면 '&gt;' 가 글자로 보인다(실측: "왔또요&gt;&lt;"). 받을 때 푼다.
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const unent = (s) => String(s == null ? '' : s)
+  .replace(/&(amp|lt|gt|quot|apos|nbsp|#(\d+)|#x([0-9a-f]+));/gi, (m, k, dec, hex) =>
+    dec ? String.fromCodePoint(+dec) : hex ? String.fromCodePoint(parseInt(hex, 16))
+        : (ENT[k.toLowerCase()] ?? m));
 
 let STATE = { bid: null, no: null, post: null, people: [], fans: {}, when: null };
 
@@ -645,7 +652,8 @@ async function load(bid, no, quiet) {
     let all = [], page = 1, last = 1;
     do {
       const d = await getJSON(API_COMMENT(bid, no, page));
-      all = all.concat(d.data || []);
+      all = all.concat((d.data || []).map(c =>
+        ({ ...c, comment: unent(c.comment), userNick: unent(c.userNick) })));
       last = (d.meta && d.meta.lastPage) || 1;
       page++;
     } while (page <= last && page <= 60);   // 1,800개까지. 그 이상이면 끊는다.
