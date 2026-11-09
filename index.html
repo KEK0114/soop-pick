@@ -150,6 +150,20 @@
   select{font:inherit;padding:9px 10px;background:var(--panel2);border:1px solid var(--bd);
     border-radius:8px;color:var(--tx);font-size:13px;font-weight:700;cursor:pointer}
   select:focus{outline:none;border-color:var(--acc)}
+  /* 체크해서 복사 */
+  .tbl .ck{width:28px;text-align:center;padding:8px 4px}
+  .tbl .ck input,.ckc input{width:15px;height:15px;cursor:pointer;accent-color:var(--acc);margin:0;vertical-align:middle}
+  .ckc{flex:none;padding-top:8px}
+  #copywrap{display:inline-flex;align-items:center}
+  #copywrap button{border-radius:8px 0 0 8px}
+  #copyfmt{border-radius:0 8px 8px 0;border-left:none;padding:9px 8px;max-width:170px;font-weight:600;color:var(--mut)}
+  /* 지난번과 견준 등락 */
+  .tbl .rk{white-space:nowrap}
+  .mv{font-size:10.5px;font-weight:800;margin-left:4px;white-space:nowrap}
+  .mv.up{color:var(--ok)} .mv.dn{color:var(--bad)} .mv.new{color:var(--acc)}
+  .now.up{color:var(--ok)} .now.dn{color:var(--bad)}
+  /* 항목별 표 */
+  .tbl .fv{color:var(--mut);font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tie{background:#2e2718;border:1px solid #5c5027;color:#e8cd88;border-radius:8px;
     padding:10px 12px;font-size:12.5px;margin:10px 0}
   .cutnote{color:var(--mut);font-size:12.5px;margin:14px 0 4px;text-align:center;
@@ -271,6 +285,7 @@
       <div class="views">
         <button id="vtable" class="on">전체 종합표</button>
         <button id="vcard">지원서 보기</button>
+        <button id="vform" style="display:none" title="지원서의 '항목 : 값' 을 읽어 칸으로 나눈 표">항목별 표</button>
       </div>
       <button id="todo">아직 확인 안 한 것만</button>
       <select id="who" title="SOOP 뱃지로 거릅니다. 고른 조건에 안 맞는 사람은 순위에서 빠집니다.">
@@ -281,9 +296,20 @@
         <option value="top">열혈팬만</option>
       </select>
       <input type="text" id="q" placeholder="닉네임 · 아이디 · 내용으로 찾기" style="flex:1;min-width:180px">
-      <button id="copy">뽑힌 사람 복사</button>
+      <span id="copywrap">
+        <button id="copy" title="커트라인 안쪽 사람을 복사합니다. 체크를 하면 체크한 사람만 복사합니다.">뽑힌 사람 복사</button>
+        <select id="copyfmt" title="복사할 모양">
+          <option value="full">순위 · 닉네임 (아이디) · 좋아요</option>
+          <option value="nick">닉네임만 · 줄바꿈</option>
+          <option value="nickc">닉네임만 · 쉼표</option>
+          <option value="nickid">닉네임 (아이디)</option>
+          <option value="id">아이디만</option>
+        </select>
+      </span>
+      <button id="selclear" style="display:none" title="체크를 모두 풉니다">선택 해제</button>
       <button id="xls" title="지금 순위를 그대로 엑셀 파일(.xlsx)로 내려받습니다.">엑셀로 내려받기</button>
       <button id="reload">새로고침</button>
+      <button id="auto" title="30초마다 다시 불러옵니다. 방송 중에 띄워 둘 때 켜세요. 등락 표시(▲▼)는 이 화면을 처음 연 때와 견준 것입니다.">자동 새로고침</button>
       <button id="freeze" title="모집이 끝났으면 누르세요. 지금 이 순간의 좋아요로 순위를 굳힙니다.">지금으로 마감</button>
       <span id="cutbox" style="display:none;align-items:center;gap:6px">
         <span class="lbl">마감 시각</span>
@@ -371,6 +397,141 @@ const badgeFromBits = (n) => Object.fromEntries(BADGES.map(x => [x[2], !!(n & x[
 let WHO = '';            // 거르기 조건. '' 이면 전원, 'fan' 이면 팬클럽만 …
 function setWho(v) { WHO = BADGES.some(b => b[0] === v && b[4]) ? v : ''; }
 const whoLabel = () => { const x = BADGES.find(b => b[0] === WHO); return x ? x[1] : ''; };
+
+// 체크해서 복사. 체크한 사람(아이디)은 이 화면 안에서만 산다 — 주소에도 서버에도 안 담는다.
+const SEL = new Set();
+const FMTKEY = 'soop-pick-copyfmt';
+let COPYFMT = 'full';
+try { COPYFMT = localStorage.getItem(FMTKEY) || 'full'; } catch (e) { /* 사생활 보호 창 */ }
+
+// ─────────────────────────────────────────────────────────── 지난번과 견주기
+// 순위 옆의 ▲▼ 는 **이 화면을 처음 연 때**(또는 이 브라우저로 지난번에 봤을 때)와
+// 견준 것이다. 새로고침·자동 새로고침을 해도 기준은 안 움직인다 — 30초 전과
+// 견주면 화살표가 나타났다 사라졌다 해서 읽을 수가 없다. 기준 시각은 사람 수
+// 옆에 적는다. 창을 닫을 때 지금 순위를 남겨 두어 다음에 열면 그것과 견준다.
+const PREVKEY = (b, o) => 'soop-pick-prev:' + b + '/' + o;
+let PREV = null;    // { at, rank: {아이디: 등수}, likes: {아이디: 좋아요} }
+function prevOf(st) {
+  const o = { at: (st.when || new Date()).getTime(), rank: {}, likes: {} };
+  st.people.forEach((c, i) => { o.rank[c.userId] = i + 1; o.likes[c.userId] = c.likeCnt || 0; });
+  return o;
+}
+function loadPrev(b, o) {
+  try { const p = JSON.parse(localStorage.getItem(PREVKEY(b, o))); return (p && p.rank) ? p : null; }
+  catch (e) { return null; }
+}
+function savePrev() {
+  if (!STATE.bid || !STATE.people.length || PIN) return;
+  try { localStorage.setItem(PREVKEY(STATE.bid, STATE.no), JSON.stringify(prevOf(STATE))); } catch (e) { /* 그냥 안 남긴다 */ }
+}
+window.addEventListener('pagehide', savePrev);
+document.addEventListener('visibilitychange', () => { if (document.hidden) savePrev(); });
+// 등락은 **전체 지원자 속 순위**로 센다. 조건·검색으로 보이는 줄이 바뀌어도 화살표가 흔들리지 않게.
+function moveTag(c) {
+  if (!PREV || SNAP || PIN || !STATE.rawRank) return '';
+  const was = PREV.rank[c.userId];
+  if (was == null) return '<span class="mv new" title="기준 시각 뒤에 새로 올라온 신청">NEW</span>';
+  const d = was - (STATE.rawRank[c.userId] || 0);
+  if (!d) return '';
+  return d > 0 ? `<span class="mv up" title="기준 시각에는 ${fmt(was)}등">▲${fmt(d)}</span>`
+               : `<span class="mv dn" title="기준 시각에는 ${fmt(was)}등">▼${fmt(-d)}</span>`;
+}
+function likeDelta(c) {
+  if (!PREV || SNAP || PIN) return '';
+  const was = PREV.likes[c.userId];
+  if (was == null) return '';
+  const d = (c.likeCnt || 0) - was;
+  return d ? `<span class="now ${d > 0 ? 'up' : 'dn'}" title="기준 시각에는 ${fmt(was)}개">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}</span>` : '';
+}
+function whenShort(ms) {
+  const d = new Date(ms), now = new Date();
+  const same = d.toDateString() === now.toDateString();
+  return d.toLocaleString('ko-KR', same ? { hour: '2-digit', minute: '2-digit' }
+                                        : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ─────────────────────────────────────────────────────────── 자동 새로고침
+// 방송 중에 띄워 두는 용도. 안 보는 탭에서는 쉰다. 켠 것은 주소에 auto=1 로 남는다.
+const AUTOSEC = 30;
+let AUTO = false, AUTOT = null, AUTOLEFT = 0, LOADING = false;
+function setAuto(on) {
+  AUTO = !!on;
+  clearInterval(AUTOT); AUTOT = null;
+  const b = $('#auto');
+  b.classList.toggle('primary', AUTO);
+  if (!AUTO) { b.textContent = '자동 새로고침'; syncUrl(); return; }
+  AUTOLEFT = AUTOSEC;
+  b.textContent = `자동 새로고침 ${AUTOLEFT}초`;
+  AUTOT = setInterval(() => {
+    if (document.hidden) return;
+    AUTOLEFT--;
+    if (AUTOLEFT <= 0) {
+      AUTOLEFT = AUTOSEC;
+      if (STATE.bid && !LOADING && !PIN) load(STATE.bid, STATE.no, true);
+    }
+    b.textContent = `자동 새로고침 ${AUTOLEFT}초`;
+  }, 1000);
+  syncUrl();
+}
+
+// ─────────────────────────────────────────────────────────── 지원서 항목
+// 지원서는 대개 "닉네임 : 앙또 / 활동 시간대 : 낮" 처럼 **항목 : 값** 꼴이다
+// (글에 적힌 양식을 베끼기 때문). 그 항목을 읽어 칸으로 나눈다 — "활동 시간대만
+// 쭉 보기" 가 되고, 엑셀에서도 칸마다 거를 수 있다. 자유롭게 쓴 글이라 못 읽는
+// 사람도 있다. 그런 사람은 칸이 비고 지원서 전문은 그대로 남는다.
+// 항목 이름은 25자 안쪽, 그 뒤에 : 가 와야 한다. 앞에 붙은 이모지·기호는 뗀다.
+const FIELD_RE = /^[^\p{L}\p{N}]*([\p{L}\p{N}][^:：\n]{0,24}?)\s*[:：]\s*(.*)$/u;
+const fkey = (name) => name.replace(/\s+/g, '').toLowerCase();
+function fieldsOf(text) {
+  const out = [];
+  let cur = null;
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim();
+    const m = line.match(FIELD_RE);
+    if (m && !/^https?$/i.test(m[1]) && !m[2].startsWith('//')) {
+      cur = { key: fkey(m[1]), name: m[1].trim(), value: m[2].trim() };
+      out.push(cur);
+    } else if (!line) {
+      cur = null;                         // 빈 줄이면 항목이 끝난 것
+    } else if (cur) {
+      cur.value = (cur.value ? cur.value + ' ' : '') + line;   // 값이 여러 줄이면 이어 붙인다
+    }
+  }
+  return out;
+}
+// 이 글의 지원서들에 공통으로 나오는 항목. 셋 중 하나 이상(30%)이 쓴 항목만 칸으로 삼는다 —
+// 한두 사람만 쓴 항목까지 칸을 내면 표가 비어 보인다.
+let FORM = { src: null, schema: { keys: [], names: {} }, vals: new Map() };
+function schema() {
+  if (FORM.src === STATE.people) return FORM.schema;
+  const cnt = new Map(), name = new Map(), pos = new Map();
+  for (const c of STATE.people) {
+    const seen = new Set();
+    fieldsOf(c.comment).forEach((f, i) => {
+      if (seen.has(f.key)) return;
+      seen.add(f.key);
+      cnt.set(f.key, (cnt.get(f.key) || 0) + 1);
+      pos.set(f.key, (pos.get(f.key) || 0) + i);
+      if (!name.has(f.key)) name.set(f.key, f.name);
+    });
+  }
+  const min = Math.max(2, Math.ceil(STATE.people.length * 0.3));
+  const keys = [...cnt.keys()].filter(k => cnt.get(k) >= min)
+    .sort((a, b) => (pos.get(a) / cnt.get(a)) - (pos.get(b) / cnt.get(b)));   // 지원서에 적힌 순서대로
+  FORM = { src: STATE.people, vals: new Map(),
+           schema: { keys, names: Object.fromEntries(keys.map(k => [k, name.get(k)])) } };
+  return FORM.schema;
+}
+function formValues(c) {
+  schema();
+  let v = FORM.vals.get(c.userId);
+  if (!v) {
+    v = {};
+    for (const f of fieldsOf(c.comment)) if (!(f.key in v)) v[f.key] = f.value;
+    FORM.vals.set(c.userId, v);
+  }
+  return v;
+}
 
 // 댓글로 바로 가는 링크. 표·카드에서 같은 모양으로 쓴다.
 const commentLink = (c) => (!CFG.show.commentLink || !c.pCommentNo) ? '' :
@@ -460,9 +621,15 @@ async function getJSON(url) {
 }
 
 // ─────────────────────────────────────────────────────────── 불러오기
-async function load(bid, no) {
-  say('불러오는 중…', 'i');
+async function load(bid, no, quiet) {
+  if (LOADING) return;
+  LOADING = true;
+  if (!quiet) say('불러오는 중…', 'i');
   $('#go').disabled = true;
+  // 같은 글을 이 화면에서 이미 보고 있으면 등락 기준은 그대로 둔다. 다른 글이거나
+  // 처음이면 이 브라우저가 기억하는 지난번 순위를 기준으로 삼는다.
+  const first = !(STATE.bid === bid && STATE.no === no && STATE.people.length);
+  if (first) { PREV = loadPrev(bid, no); SEL.clear(); }
   try {
     // 글 정보는 **있으면 좋은 것**이지 없으면 못 하는 것이 아니다.
     // 애청자 공개 게시판은 글이 403 인데 댓글은 그대로 읽힌다(실측).
@@ -494,8 +661,12 @@ async function load(bid, no) {
       (b.likeCnt || 0) - (a.likeCnt || 0) ||
       String(a.regDate).localeCompare(String(b.regDate)));   // 같으면 먼저 쓴 사람이 위
 
-    STATE = { bid, no, post, postWhy, people, info: readPost(post),
+    // 전체 지원자 속 등수. 등락(▲▼)은 이걸로 센다.
+    const rawRank = {};
+    people.forEach((c, i) => { rawRank[c.userId] = i + 1; });
+    STATE = { bid, no, post, postWhy, people, rawRank, info: readPost(post),
               fans: STATE.fans || {}, when: new Date() };
+    if (first) savePrev();          // 창이 갑자기 닫혀도 다음에 견줄 것은 남게
     // 글에 인원이 적혀 있으면 그걸 기본값으로. 단, 주소에 이미 인원이
     // 들어 있으면(남이 준 링크) 그쪽이 우선이다.
     if (STATE.info.count && !new URLSearchParams(location.search).get('n'))
@@ -514,6 +685,7 @@ async function load(bid, no) {
                           : '. 주소가 맞는지 확인해 주세요.'), 'e');
   } finally {
     $('#go').disabled = false;
+    LOADING = false;
   }
 }
 
@@ -860,9 +1032,21 @@ function paintList() {
       : '') +
     (ADMIN.ex.size ? ` · 제외 ${ADMIN.ex.size}명` : '') +
     (q ? ` · 찾은 것 ${people.filter(hit).length}명` : '') +
-    (when ? ` · ${when} 기준` : '');
+    (when ? ` · ${when} 기준` : '') +
+    (PREV && !SNAP && !PIN && STATE.rawRank
+      ? (people.some(c => moveTag(c) || likeDelta(c))
+          ? ` · ▲▼ 기준 ${whenShort(PREV.at)}`
+          : ` · ${whenShort(PREV.at)} 뒤로 바뀐 것 없음`)
+      : '');
 
-  if (VIEW === 'table') { paintTable(people, n, hit); return; }
+  // 항목별 표는 읽어낸 항목이 있을 때만 보여 준다
+  const fk = schema().keys.length;
+  const vf = $('#vform');
+  vf.style.display = fk ? '' : 'none';
+  vf.textContent = fk ? `항목별 표 (${fk}칸)` : '항목별 표';
+
+  if (VIEW === 'table' || (VIEW === 'form' && !fk)) { paintTable(people, n, hit); return; }
+  if (VIEW === 'form') { paintForm(people, n, hit); return; }
 
   let html = '';
   people.forEach((c, i) => {
@@ -886,6 +1070,7 @@ function paintList() {
     const photo = c.photo && c.photo.url;
     const isFix = ADMIN.fix.has(c.userId);
     html += `<div class="item${inCut ? ' in' : ''}${isFix ? ' fixed' : ''}">
+      <div class="ckc">${pickBox(c)}</div>
       <div class="rank">${rank}</div>
       <img class="pic" loading="lazy" alt=""
            src="${esc(c.profileImage || '')}"
@@ -895,6 +1080,7 @@ function paintList() {
           <a class="sta" href="${esc(STATION_URL(c.userId))}" target="_blank" rel="noopener"
              title="${esc(c.userNick || '')} 님의 방송국 열기"><b>${esc(c.userNick || '')}</b> ↗</a>
           <span class="id">${esc(c.userId || '')}</span>
+          ${moveTag(c)}
           ${commentLink(c)}
           ${badgeChips(c)}
           ${waitTag(people, n, i)}
@@ -904,7 +1090,7 @@ function paintList() {
           ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
         </div>
         <div class="nums">
-          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span>${nowTag(c)}</span>
+          <span class="like">${fmt(c.likeCnt)}<span style="font-size:11px"> 좋아요</span>${nowTag(c)}${likeDelta(c)}</span>
           ${CFG.show.followers ? `<span class="fan" data-fan="${esc(c.userId)}">…</span>` : ''}
           ${CFG.show.joined ? `<span class="fan" data-join="${esc(c.userId)}" data-at="${esc(c.regDate || '')}" data-pre="가입 "></span>` : ''}
           <span>${esc((c.regDate || '').slice(5, 16))}</span>
@@ -943,7 +1129,7 @@ function paintList() {
     syncUrl(); paintList(); paintAdmin(); refreshPin();
   }));
 
-  paintFans();
+  bindRows();
 }
 
 // 고정 안내줄. 언제 기준인지 · 그 뒤로 몇 명이 더 달렸는지.
@@ -1223,13 +1409,104 @@ function hookMore(root) {
   });
 }
 
+// 커트라인 줄과 동점 경고. 종합표와 항목별 표가 같이 쓴다.
+function cutRows(people, n, cols) {
+  let h = `<tr class="cutrow"><td colspan="${cols}">여기까지 ${fmt(n)}명${cutGapText(cutGap(people, n), n)}</td></tr>`;
+  const prev = people[n - 1], c = people[n];
+  if (prev && c && (prev.likeCnt || 0) === (c.likeCnt || 0)) {
+    const same = people.filter(x => (x.likeCnt || 0) === (c.likeCnt || 0)).length;
+    h += `<tr><td colspan="${cols}" style="background:#2e2718;color:#e8cd88;
+      font-size:12px;padding:9px 10px">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등이
+      ${fmt(c.likeCnt)}개로 같습니다</b> — 같은 점수가 ${fmt(same)}명이라
+      여기서는 못 가립니다. 인원을 바꾸거나 직접 정하세요.</td></tr>`;
+  }
+  return h;
+}
+
+// 체크칸. 체크한 사람만 복사할 수 있다.
+const pickBox = (c) =>
+  `<input type="checkbox" class="pick" data-pick="${esc(c.userId)}"${SEL.has(c.userId) ? ' checked' : ''}
+          title="골라서 복사하기">`;
+
+// 줄 누르기(지원서 창)·체크칸·전부 고르기. 표를 그릴 때마다 다시 건다.
+function bindRows() {
+  document.querySelectorAll('[data-open]').forEach(tr =>
+    tr.addEventListener('click', (e) => {
+      // 링크나 체크칸을 눌렀으면 지원서 창은 열지 않는다
+      if (e.target.closest('a, input, label')) return;
+      openDetail(tr.dataset.open);
+    }));
+  document.querySelectorAll('input.pick').forEach(b => b.addEventListener('change', () => {
+    if (b.checked) SEL.add(b.dataset.pick); else SEL.delete(b.dataset.pick);
+    paintSel();
+  }));
+  const all = $('#ckall');
+  if (all) all.addEventListener('change', () => {
+    document.querySelectorAll('input.pick').forEach(b => {
+      b.checked = all.checked;
+      if (all.checked) SEL.add(b.dataset.pick); else SEL.delete(b.dataset.pick);
+    });
+    paintSel();
+  });
+  paintSel();
+  paintFans();
+}
+function paintSel() {
+  const b = $('#copy');
+  b.textContent = SEL.size ? `고른 ${fmt(SEL.size)}명 복사` : '뽑힌 사람 복사';
+  $('#selclear').style.display = SEL.size ? '' : 'none';
+}
+
+// ─────────────────────────────────────────────────────────── 항목별 표
+// 지원서에서 읽어낸 항목을 칸으로 펼친 표. 한 항목만 쭉 훑어 볼 때 쓴다.
+function paintForm(people, n, hit) {
+  const sc = schema(), keys = sc.keys;
+  const cols = 4 + keys.length;
+  const rows = [];
+  people.forEach((c, i) => {
+    const rank = i + 1;
+    const inCut = n > 0 && rank <= n;
+    const isFix = ADMIN.fix.has(c.userId);
+    if (n > 0 && rank === n + 1) rows.push(cutRows(people, n, cols));
+    if (!hit(c)) return;
+    const v = formValues(c);
+    rows.push(`<tr class="${inCut ? 'in' : ''}${isFix ? ' fixed' : ''}" data-open="${esc(c.userId)}">
+      <td class="ck">${pickBox(c)}</td>
+      <td class="rk r">${rank}${moveTag(c)}</td>
+      <td><div class="who2">
+        <img loading="lazy" alt="" src="${esc(c.profileImage || '')}"
+             onerror="this.style.visibility='hidden'">
+        <b>${esc(c.userNick || '')}</b>
+        ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+        ${waitTag(people, n, i)}
+      </div></td>
+      <td class="r lk">${fmt(c.likeCnt)}${nowTag(c)}${likeDelta(c)}</td>
+      ${keys.map(k => `<td class="fv" title="${esc(v[k] || '')}">${esc((v[k] || '').slice(0, 80))}</td>`).join('')}
+    </tr>`);
+  });
+  const blank = people.filter(c => !Object.keys(formValues(c)).length).length;
+
+  $('#list').innerHTML = rows.length
+    ? `<div class="tblwrap"><table class="tbl"><thead><tr>
+         <th class="ck"><input type="checkbox" id="ckall" title="보이는 사람 전부 고르기"></th>
+         <th class="r">순위</th><th>닉네임</th><th class="r">좋아요</th>
+         ${keys.map(k => `<th>${esc(sc.names[k])}</th>`).join('')}
+       </tr></thead><tbody>${rows.join('')}</tbody></table></div>
+       ${cutNote(people, n) ? `<div class="cutnote">${cutNote(people, n)}</div>` : ''}
+       <div class="hint">지원서에서 <b>항목 : 값</b> 모양을 읽어 칸으로 나눈 것입니다.
+         ${blank ? `양식대로 안 쓴 <b>${fmt(blank)}명</b>은 칸이 비어 있습니다. ` : ''}
+         줄을 누르면 지원서 전문이 열립니다. 엑셀에도 같은 칸이 들어갑니다.</div>`
+    : `<div class="empty">${people.length ? '찾는 사람이 없습니다.' : '이 글에는 아직 댓글이 없습니다.'}</div>`;
+  bindRows();
+}
+
 function paintTable(people, n, hit) {
   // 전원이 확인된 글에서는 '확인' 칸이 통째로 비어 있게 된다. 그런 칸은
   // 아예 내보내지 않는다 — 빈 칸에 머리글만 있으면 뭘 봐야 하나 싶다.
   const anyTodo = CFG.show.checked && people.some(c => !isChecked(c));
   // 고정 주소에 지원서를 안 담았으면 그 칸은 통째로 비어 버린다. 안 낸다.
   const anyText = people.some(c => (c.comment || '') || (c.photo && c.photo.url));
-  const cols = 5 + (CFG.show.followers ? 1 : 0) + (CFG.show.joined ? 1 : 0)
+  const cols = 6 + (CFG.show.followers ? 1 : 0) + (CFG.show.joined ? 1 : 0)
              + (anyTodo ? 1 : 0) + (anyText ? 1 : 0);
   const rows = [];
   people.forEach((c, i) => {
@@ -1237,24 +1514,15 @@ function paintTable(people, n, hit) {
     const inCut = n > 0 && rank <= n;
     const isFix = ADMIN.fix.has(c.userId);
 
-    if (n > 0 && rank === n + 1) {
-      rows.push(`<tr class="cutrow"><td colspan="${cols}">여기까지 ${fmt(n)}명${cutGapText(cutGap(people, n), n)}</td></tr>`);
-      const prev = people[n - 1];
-      if (prev && (prev.likeCnt || 0) === (c.likeCnt || 0)) {
-        const same = people.filter(x => (x.likeCnt || 0) === (c.likeCnt || 0)).length;
-        rows.push(`<tr><td colspan="${cols}" style="background:#2e2718;color:#e8cd88;
-          font-size:12px;padding:9px 10px">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등이
-          ${fmt(c.likeCnt)}개로 같습니다</b> — 같은 점수가 ${fmt(same)}명이라
-          여기서는 못 가릅니다. 인원을 바꾸거나 직접 정하세요.</td></tr>`);
-      }
-    }
+    if (n > 0 && rank === n + 1) rows.push(cutRows(people, n, cols));
     if (!hit(c)) return;
 
     const peek = (c.comment || '').replace(/\s+/g, ' ').trim();
     const hasPic = c.photo && c.photo.url && CFG.show.photos;
 
     rows.push(`<tr class="${inCut ? 'in' : ''}${isFix ? ' fixed' : ''}" data-open="${esc(c.userId)}">
-      <td class="rk r">${rank}</td>
+      <td class="ck">${pickBox(c)}</td>
+      <td class="rk r">${rank}${moveTag(c)}</td>
       <td><div class="who2">
         <img loading="lazy" alt="" src="${esc(c.profileImage || '')}"
              onerror="this.style.visibility='hidden'">
@@ -1270,7 +1538,7 @@ function paintTable(people, n, hit) {
          title="${esc(c.userNick || '')} 님의 방송국 열기">방송국 ↗</a>
          ${commentLink(c)}</td>
       <td class="idc hidesm">${esc(c.userId || '')}</td>
-      <td class="r lk">${fmt(c.likeCnt)}${nowTag(c)}</td>
+      <td class="r lk">${fmt(c.likeCnt)}${nowTag(c)}${likeDelta(c)}</td>
       ${CFG.show.followers
         ? `<td class="r hidesm" data-fan="${esc(c.userId)}" style="color:var(--mut)">…</td>` : ''}
       ${CFG.show.joined
@@ -1283,6 +1551,7 @@ function paintTable(people, n, hit) {
 
   $('#list').innerHTML = rows.length
     ? `<div class="tblwrap"><table class="tbl"><thead><tr>
+         <th class="ck"><input type="checkbox" id="ckall" title="보이는 사람 전부 고르기"></th>
          <th class="r">순위</th><th>닉네임</th><th class="hidesm"></th><th class="hidesm">아이디</th>
          <th class="r">좋아요</th>${CFG.show.followers ? '<th class="r hidesm">팔로워</th>' : ''}
          ${CFG.show.joined ? '<th class="hidesm" title="방송국을 만든 때. 석 달이 안 됐으면 새 계정으로 표시합니다">가입</th>' : ''}
@@ -1295,13 +1564,7 @@ function paintTable(people, n, hit) {
          ${ADMIN.on ? '관리자 버튼은 <b>지원서 보기</b> 쪽에 있습니다.' : ''}</div>`
     : `<div class="empty">${people.length ? '찾는 사람이 없습니다.' : '이 글에는 아직 댓글이 없습니다.'}</div>`;
 
-  document.querySelectorAll('[data-open]').forEach(tr =>
-    tr.addEventListener('click', (e) => {
-      // 방송국 링크를 눌렀으면 지원서 창은 열지 않는다
-      if (e.target.closest('a')) return;
-      openDetail(tr.dataset.open);
-    }));
-  paintFans();
+  bindRows();
 }
 
 // ─────────────────────────────────────────────────────────── 지원서 상세
@@ -1391,6 +1654,7 @@ function syncUrl() {
     else v.searchParams.delete('cut');
     if (CANFREEZE && WHO) v.searchParams.set('who', WHO);
     else v.searchParams.delete('who');
+    if (AUTO) v.searchParams.set('auto', '1'); else v.searchParams.delete('auto');
     history.replaceState(null, '', v);
     return;
   }
@@ -1410,6 +1674,7 @@ function syncUrl() {
   if (CUT) u.searchParams.set('cut', Math.floor(CUT.getTime() / 1000));
   else u.searchParams.delete('cut');
   if (WHO) u.searchParams.set('who', WHO); else u.searchParams.delete('who');
+  if (AUTO) u.searchParams.set('auto', '1'); else u.searchParams.delete('auto');
   history.replaceState(null, '', u);
 }
 
@@ -1495,6 +1760,10 @@ function sheetData() {
   head.push('뱃지', '스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소', '댓글 주소');
   width.push(14, 12, 12, 6, 18, 60, 34, 34, 44);
   const applyCol = head.indexOf('지원서');
+  // 지원서에서 읽어낸 항목은 맨 뒤에 칸을 하나씩. 이름 앞에 '항목:' 을 붙여
+  // 원래 칸(닉네임 등)과 헷갈리지 않게 한다.
+  const fsc = schema();
+  fsc.keys.forEach(k => { head.push('항목: ' + fsc.names[k]); width.push(24); });
 
   const rows = people.map((c, i) => {
     const f = STATE.fans[c.userId] || {};
@@ -1513,6 +1782,8 @@ function sheetData() {
            (c.photo && c.photo.url) || '',
            STATION_URL(c.userId),
            c.pCommentNo ? COMMENT_URL(c) : '');
+    const fv = formValues(c);
+    fsc.keys.forEach(k => r.push(fv[k] || ''));
     return r;
   });
 
@@ -1697,7 +1968,7 @@ async function makePin(withText) {
   const u = new URL(location.href);
   u.search = '';
   u.hash = 'pin=' + (out.z ? '1' : '0') + B64U.enc(out.b) +
-           (VIEW === 'card' ? '&view=card' : '');
+           (VIEW !== 'table' ? '&view=' + VIEW : '');
   return { url: u.toString(), raw };
 }
 
@@ -1776,6 +2047,7 @@ async function shortenView(canFreeze) {
   if (ADMIN.ex.size) body.x = [...ADMIN.ex];
   if (ADMIN.fix.size) body.f = [...ADMIN.fix];
   if (VIEW === 'card') body.w = 1;
+  else if (VIEW === 'form') body.w = 2;
   if (WHO) body.q = WHO;
   return location.origin + '/v/' + await keep(JSON.stringify(body));
 }
@@ -1823,6 +2095,7 @@ function setView(v) {
   VIEW = v;
   $('#vtable').classList.toggle('on', v === 'table');
   $('#vcard').classList.toggle('on', v === 'card');
+  $('#vform').classList.toggle('on', v === 'form');
   syncUrl();
   if (STATE.people.length) paintList();
 }
@@ -1840,6 +2113,18 @@ $('#todo').addEventListener('click', () => {
 });
 $('#vtable').addEventListener('click', () => setView('table'));
 $('#vcard').addEventListener('click', () => setView('card'));
+$('#vform').addEventListener('click', () => setView('form'));
+$('#auto').addEventListener('click', () => setAuto(!AUTO));
+$('#selclear').addEventListener('click', () => {
+  SEL.clear();
+  document.querySelectorAll('input.pick').forEach(b => { b.checked = false; });
+  const all = $('#ckall'); if (all) all.checked = false;
+  paintSel();
+});
+$('#copyfmt').addEventListener('change', () => {
+  COPYFMT = $('#copyfmt').value;
+  try { localStorage.setItem(FMTKEY, COPYFMT); } catch (e) { /* 그냥 안 기억한다 */ }
+});
 
 // 상세창은 바깥을 누르거나 Esc 로 닫는다
 $('#ov').addEventListener('click', (e) => { if (e.target.id === 'ov') closeDetail(); });
@@ -1883,17 +2168,27 @@ $('#who').addEventListener('change', () => {
   // 순위 자체가 바뀌므로 고정 주소·공유 안내도 다시 만든다.
   if (STATE.people.length) { render(); paintSnap(); paintAdmin(); refreshPin(); paintShare(); }
 });
+// 복사. 체크한 사람이 있으면 그 사람들만, 없으면 커트라인 안쪽 사람을 복사한다.
+// 모양은 옆 메뉴에서 고른다. 순위는 체크와 상관없이 **실제 등수**다.
 $('#copy').addEventListener('click', () => {
   const n = Math.max(0, parseInt($('#n').value, 10) || 0);
   const all = ranked();
-  const list = all.slice(0, n || all.length);
+  const list = SEL.size ? all.filter(c => SEL.has(c.userId)) : all.slice(0, n || all.length);
   if (!list.length) return;
-  const text = list.map((c, i) =>
-    `${i + 1}. ${c.userNick} (${c.userId}) — 좋아요 ${likesOf(c)}`).join('\n')
-    + (SNAP ? `\n\n(${SNAP.at.toLocaleString('ko-KR')} 로 마감한 순위)` : '');
+  const rankOf = new Map(all.map((c, i) => [c.userId, i + 1]));
+  const one = (c) => {
+    switch (COPYFMT) {
+      case 'nick': case 'nickc': return c.userNick || c.userId;
+      case 'nickid': return `${c.userNick} (${c.userId})`;
+      case 'id': return c.userId;
+      default: return `${rankOf.get(c.userId)}. ${c.userNick} (${c.userId}) — 좋아요 ${likesOf(c)}`;
+    }
+  };
+  const text = list.map(one).join(COPYFMT === 'nickc' ? ', ' : '\n')
+    + (COPYFMT === 'full' && SNAP ? `\n\n(${SNAP.at.toLocaleString('ko-KR')} 로 마감한 순위)` : '');
   navigator.clipboard.writeText(text).then(() => {
-    const b = $('#copy'); b.textContent = '복사했습니다';
-    setTimeout(() => { b.textContent = '뽑힌 사람 복사'; }, 1500);
+    const b = $('#copy'); b.textContent = `복사했습니다 (${fmt(list.length)}명)`;
+    setTimeout(paintSel, 1500);
   });
 });
 
@@ -1911,7 +2206,9 @@ function applyConfig() {
   if (Array.isArray(CFG.footer) && CFG.footer.length)
     document.querySelector('.foot').innerHTML = CFG.footer.join('<br>');
   if (!CFG.show.search) $('#q').style.display = 'none';
-  if (!CFG.show.copyButton) $('#copy').style.display = 'none';
+  if (!CFG.show.copyButton) $('#copywrap').style.display = 'none';
+  $('#copyfmt').value = COPYFMT;
+  if (!$('#copyfmt').value) { COPYFMT = 'full'; $('#copyfmt').value = 'full'; }
   if (CFG.show.excel === false) $('#xls').style.display = 'none';
   if (!CFG.show.badges) $('#who').style.display = 'none';
   if (CFG.defaultPickCount) $('#n').value = CFG.defaultPickCount;
@@ -2001,7 +2298,7 @@ function applyReadOnly() {
   // 조건 메뉴도 스트리머만. 보기만 하는 사람에게는 순위를 바꾸는 손잡이를 안 보여 준다.
   $('#who').style.display = (CANFREEZE && CFG.show.badges) ? '' : 'none';
   paintCut();
-  if (PIN) $('#reload').style.display = 'none';   // 부를 데가 없다
+  if (PIN) { $('#reload').style.display = 'none'; $('#auto').style.display = 'none'; }   // 부를 데가 없다
   // 스트리머가 config 로 정해 둔 소개말이 있으면 지우지 않고 아래에 덧붙인다.
   // 맨 아래 안내문은 '늘 최신입니다' 라고 말한다. 고정된 화면에서는 거짓말이다.
   if (PIN) {
@@ -2032,7 +2329,7 @@ function applyReadOnly() {
   // ① 주소에 있는 값을 **먼저** 전부 읽어 넣는다
   const n = q.get('n');
   if (n && +n > 0) $('#n').value = +n;
-  if (q.get('view') === 'card') VIEW = 'card';
+  if (q.get('view') === 'card' || q.get('view') === 'form') VIEW = q.get('view');
   if (q.get('snap')) SNAP = readSnap(q.get('snap'));
   if (+q.get('cut') > 0) CUT = new Date(+q.get('cut') * 1000);
   setWho(q.get('who'));
@@ -2072,8 +2369,9 @@ function applyReadOnly() {
         else if (o.s) SNAP = readSnap(o.s);
         (o.x || []).forEach(x => ADMIN.ex.add(x));
         (o.f || []).forEach(x => ADMIN.fix.add(x));
-        setView(o.w ? 'card' : 'table');
+        setView(o.w === 2 ? 'form' : o.w ? 'card' : 'table');
         paintAdmin();
+        if (q.get('auto') === '1') setAuto(true);
         return load(o.b, o.o);
       })
       .catch(() => {
@@ -2086,7 +2384,8 @@ function applyReadOnly() {
   }
 
   if (PIN) {
-    setView((h.get('view') || q.get('view')) === 'card' ? 'card' : 'table');
+    const pv = h.get('view') || q.get('view');
+    setView(pv === 'card' || pv === 'form' ? pv : 'table');
     const got = slug ? fetchPin(slug) : loadPin(pin);
     got.then(() => {
       render(); paintSnap(); paintAdmin();
@@ -2106,6 +2405,7 @@ function applyReadOnly() {
   // ② 그다음에 그린다 (setView 가 주소를 다시 쓰므로 순서가 중요하다)
   setView(VIEW);
   paintAdmin();
+  if (q.get('auto') === '1') setAuto(true);
 
   const post = q.get('post') || CFG.defaultPostUrl;
   if (post) {
