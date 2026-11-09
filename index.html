@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>좋아요 순위 — SOOP 게시글 지원자 줄 세우기</title>
 <script src="config.js"></script>
+<script>
+// 밝은 화면을 골라 둔 사람에게 어두운 화면이 한순간 비치지 않게, 그리기 전에 먼저 입힌다.
+try { if (localStorage.getItem('soop-pick-theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}
+</script>
 <meta name="description" content="SOOP 방송국 게시글의 댓글을 좋아요 순으로 줄 세워 보여줍니다. 커트라인까지.">
 <style>
   /* 서버가 없다. 이 파일 하나가 전부다 — 보는 사람 브라우저가 SOOP 를 직접 부른다.
@@ -164,6 +168,51 @@
   .now.up{color:var(--ok)} .now.dn{color:var(--bad)}
   /* 항목별 표 */
   .tbl .fv{color:var(--mut);font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tbl .fv.pos{font-style:italic}
+  .chip.fix{background:#1c2c44;color:#9dc0f0;border:1px solid #35558a}
+  .chip.prev{background:#2b2335;color:#d3b7f0;border:1px solid #55427a}
+  .tierow td{background:#2e2718;color:#e8cd88;font-size:12px;padding:9px 10px}
+  h1 .themebtn{margin-left:auto;padding:3px 9px;font-size:13px;border-radius:7px;font-weight:400}
+
+  /* ── 밝은 화면 ── 변수로 되는 것은 변수로, 색을 박아 둔 것은 아래서 덮어쓴다 */
+  :root[data-theme="light"]{
+    --bg:#f3f5f8; --panel:#ffffff; --panel2:#eef1f5; --bd:#d5dbe3;
+    --tx:#1b2430; --dim:#5f6b7a; --mut:#3d4856;
+    --acc:#2f6fe4; --ok:#1f8a3b; --warn:#9a6b00; --bad:#c43a46; --like:#d6336c;
+  }
+  [data-theme="light"] button:hover,[data-theme="light"] .meta a.open:hover{background:#e3e8ef}
+  [data-theme="light"] button.primary:hover{background:var(--acc)}
+  [data-theme="light"] .msg.e{background:#fde8ea;border-color:#f1b4bb;color:#8a1f2b}
+  [data-theme="light"] .msg.i{background:#e7f0fd;border-color:#b7cff5;color:#1f4d8f}
+  [data-theme="light"] .item.in,[data-theme="light"] .tbl tr.in{background:#eaf7ee;border-color:#9fd4ae}
+  [data-theme="light"] .tbl tr.in:hover{background:#dff2e5}
+  [data-theme="light"] .tbl tbody tr:hover{background:#f1f4f8}
+  [data-theme="light"] .tbl tr.fixed,[data-theme="light"] .item.fixed{background:#e9f0fb;border-color:#9fbbea}
+  [data-theme="light"] .cutrow td{background:#dff2e5 !important}
+  [data-theme="light"] .tierow td{background:#fff4d6;color:#6b4e00}
+  [data-theme="light"] .readbox{background:#e7f0fd;border-color:#b7cff5;color:#27415f}
+  [data-theme="light"] .readbox b,[data-theme="light"] .readbox.soft b{color:#1b2430}
+  [data-theme="light"] .readbox .warn{color:#9a6b00}
+  [data-theme="light"] .readbox.soft{background:#f6f8fb;border-color:var(--bd);color:var(--mut)}
+  [data-theme="light"] .tie{background:#fff4d6;border-color:#e6c66a;color:#6b4e00}
+  [data-theme="light"] .sharebar{background:#f6f8fb}
+  [data-theme="light"] .sharebar b,[data-theme="light"] .admbar b{color:#1b2430}
+  [data-theme="light"] .admbar{background:#e9f0fb;border-color:#9fbbea;color:#27415f}
+  [data-theme="light"] .shot img,[data-theme="light"] .dlg .full img{background:#eef1f5}
+  [data-theme="light"] .ov{background:rgba(20,30,45,.45)}
+  [data-theme="light"] .adm button.off{background:#fde8ea;border-color:#f1b4bb;color:#8a1f2b}
+  [data-theme="light"] .chip.todo,[data-theme="light"] .chip.newacc{background:#fff3cd;color:#7a5a00;border-color:#e6c66a}
+  [data-theme="light"] .chip.done{background:#e3f4e8;color:#1f6b36;border-color:#9fd4ae}
+  [data-theme="light"] .chip.best{background:#fbf3d5;color:#7a5f0a;border-color:#dcc36a}
+  [data-theme="light"] .chip.pic{background:#e2f1f8;color:#1f5b78;border-color:#9fcbe0}
+  [data-theme="light"] .chip.pass{background:#efe4f8;color:#5c3a86;border-color:#c7a9e6}
+  [data-theme="light"] .chip.prev{background:#efe4f8;color:#5c3a86;border-color:#c7a9e6}
+  [data-theme="light"] .chip.fix,[data-theme="light"] .chip.fan{background:#e4edfa;color:#234f8f;border-color:#a9c4ec}
+  [data-theme="light"] .chip.sub{background:#e1f4ee;color:#1d6b55;border-color:#9fd3c1}
+  [data-theme="light"] .chip.sup{background:#fbeadb;color:#7a4a14;border-color:#e3b98f}
+  [data-theme="light"] .chip.top{background:#fbe3e8;color:#8a2838;border-color:#eaa5b2}
+  [data-theme="light"] .chip.mgr{background:#e8eaee;color:#3a4350;border-color:#c3c9d2}
+  [data-theme="light"] .chip.wait{background:#eef1f5;color:#4a5564;border-color:#c9d1db}
   .tie{background:#2e2718;border:1px solid #5c5027;color:#e8cd88;border-radius:8px;
     padding:10px 12px;font-size:12.5px;margin:10px 0}
   .cutnote{color:var(--mut);font-size:12.5px;margin:14px 0 4px;text-align:center;
@@ -316,6 +365,9 @@
         <input type="datetime-local" id="cut" style="width:196px"
                title="이 시각 뒤에 달린 댓글은 지원으로 세지 않습니다.">
         <button id="cutoff" title="마감 시각을 지웁니다">지우기</button>
+        <label class="lbl" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"
+               title="마감 시각이 되면 이 창이 스스로 '지금으로 마감'을 누릅니다. 창이 열려 있어야 합니다.">
+          <input type="checkbox" id="af" style="margin:0"> 시각이 되면 자동 마감</label>
       </span>
       <span id="nbox" style="display:none;align-items:center;gap:6px">
         <span class="lbl">뽑을 인원</span>
@@ -325,6 +377,26 @@
       <span class="n" id="count"></span>
     </div>
     <div class="sharebar" id="sharebar" style="display:none"></div>
+    <div class="readbox soft" id="prevbox" style="display:none;margin-top:0;margin-bottom:11px">
+      <details class="more" data-more="prev" style="margin-top:0">
+        <summary><b>지난 참가자</b> — 지난번 모집에서 뽑힌 사람을 표시하거나 뺍니다</summary>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="pp" placeholder="지난번 모집 글 주소를 붙여넣으세요" style="min-width:260px">
+          <span class="lbl">그때 뽑은 인원</span>
+          <input type="number" id="ppn" min="0" max="9999" style="width:74px" placeholder="글에서">
+          <button id="ppgo">불러오기</button>
+          <button id="ppoff" style="display:none" title="지난 참가자 설정을 지웁니다">지우기</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <input type="text" id="pl" placeholder="또는 닉네임·아이디를 직접 적기 (쉼표로 구분)" style="min-width:260px">
+          <button id="plgo">적용</button>
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:12.5px">
+            <input type="checkbox" id="px" style="margin:0"> 지난 참가자는 순위에서 빼기
+          </label>
+        </div>
+        <div class="hint" id="ppinfo" style="margin-top:6px"></div>
+      </details>
+    </div>
     <div id="cutbar"></div>
     <div id="list"></div>
   </div>
@@ -397,6 +469,93 @@ const badgeFromBits = (n) => Object.fromEntries(BADGES.map(x => [x[2], !!(n & x[
 let WHO = '';            // 거르기 조건. '' 이면 전원, 'fan' 이면 팬클럽만 …
 function setWho(v) { WHO = BADGES.some(b => b[0] === v && b[4]) ? v : ''; }
 const whoLabel = () => { const x = BADGES.find(b => b[0] === WHO); return x ? x[1] : ''; };
+
+// ─────────────────────────────────────────────────────────── 지난 참가자
+// 같은 스트리머가 모집을 되풀이하면 "지난번에 뽑힌 사람" 을 알아봐야 한다 — 빼든,
+// 반대로 챙기든. 지난번 모집 글 주소를 주면 그 글의 위 N명을, 또는 닉네임·아이디를
+// 직접 적은 것을 지난 참가자로 본다. 주소에 담겨 남에게 준 주소에도 그대로 적용된다.
+//   pp=아이디/글번호/인원   pl=닉,닉,…   px=1(순위에서 뺌)
+let PP = null;                 // { bid, no, n }
+let PL = [];                   // 직접 적은 닉네임·아이디
+let PX = false;                // 지난 참가자를 순위에서 빼나
+let PREVSET = new Set();       // 아이디
+let PREVNICK = new Set();      // 소문자 닉네임
+let PPINFO = '', PPLOADED = '';
+const ppKey = () => JSON.stringify([PP, PL]);
+function parsePP(s) {
+  const m = String(s || '').match(/^([A-Za-z0-9_-]+)\/(\d+)(?:\/(\d+))?$/);
+  PP = m ? { bid: m[1], no: m[2], n: +(m[3] || 0) } : null;
+}
+const isPrev = (c) => !!c.prev || PREVSET.has(c.userId) ||
+  PREVNICK.has(String(c.userNick || '').trim().toLowerCase());
+const prevChip = (c) => isPrev(c)
+  ? '<span class="chip prev" title="지난번 모집에서 뽑힌 사람입니다">지난 참가</span>' : '';
+// 마지막으로 마감한 글을 방송국별로 기억해 둔다. 다음 모집 때 "지난 참가자" 로 바로 쓸 수 있게.
+function rememberLast() {
+  if (!STATE.bid || PIN) return;
+  try {
+    localStorage.setItem('soop-pick-last:' + STATE.bid, JSON.stringify(
+      { no: STATE.no, n: Math.max(0, parseInt($('#n').value, 10) || 0), at: Date.now() }));
+  } catch (e) { /* 그냥 안 기억한다 */ }
+}
+function lastOf(bid) {
+  try { return JSON.parse(localStorage.getItem('soop-pick-last:' + bid)) || null; } catch (e) { return null; }
+}
+
+// ─────────────────────────────────────────────────────────── 마감 시각 자동 고정
+// 마감 시각을 적어 두고 '시각이 되면 자동 마감' 을 켜면, 그 시각에 이 창이 스스로
+// 댓글을 새로 받고 '지금으로 마감' 을 누른다. 창이 열려 있어야 한다(서버가 없다).
+// 이미 지난 시각이면 하지 않는다 — 그때의 좋아요로 되돌릴 수 없기 때문이다.
+let AF = false, AFDONE = false, AFAT = null;
+function leftText(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}일 ${h}시간`;
+  if (h) return `${h}시간 ${m}분`;
+  if (m) return `${m}분 ${sec}초`;
+  return `${sec}초`;
+}
+function afLine() {
+  if (!AF || !CUT) return '';
+  const when = CUT.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (CUT > Date.now())
+    return `<div style="margin-top:6px">⏰ <b>${esc(when)}</b> 이 되면 이 창이 스스로 마감합니다<span id="afleft"></span>.
+            그때까지 이 창을 열어 두세요.</div>`;
+  return `<div class="warn" style="margin-top:6px">⏰ 마감 시각(${esc(when)})이 이미 지나서 자동 마감은 하지 않았습니다.
+          지금 값으로 멈추려면 <b>지금으로 마감</b>을 누르세요.</div>`;
+}
+async function tickAF() {
+  const el = $('#afleft');
+  if (!AF || !CUT || PIN || SNAP || (RO && !CANFREEZE)) { if (el) el.textContent = ''; return; }
+  const left = CUT - Date.now();
+  if (left > 0) { if (el) el.textContent = ' — ' + leftText(left) + ' 남음'; return; }
+  if (AFDONE || LOADING || !STATE.bid) return;
+  AFDONE = true;
+  await load(STATE.bid, STATE.no, true);     // 마감 순간의 좋아요로
+  if (SNAP) return;
+  SNAP = readSnap(makeSnap(STATE.people));
+  AFAT = new Date();
+  rememberLast();
+  syncUrl(); render(); paintSnap(); paintAdmin(); refreshPin(); paintShare();
+}
+setInterval(tickAF, 1000);
+
+// ─────────────────────────────────────────────────────────── 밝은 화면
+const THEMEKEY = 'soop-pick-theme';
+function setTheme(t, remember) {
+  if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  else document.documentElement.removeAttribute('data-theme');
+  const b = $('#theme');
+  if (b) { b.textContent = t === 'light' ? '🌙' : '☀'; b.title = t === 'light' ? '어두운 화면으로' : '밝은 화면으로'; }
+  if (remember) { try { localStorage.setItem(THEMEKEY, t); } catch (e) { /* 그냥 안 기억한다 */ } }
+}
+function bindTheme() {
+  setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+  const b = $('#theme');
+  if (b) b.addEventListener('click', () =>
+    setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light', true));
+}
 
 // 체크해서 복사. 체크한 사람(아이디)은 이 화면 안에서만 산다 — 주소에도 서버에도 안 담는다.
 const SEL = new Set();
@@ -482,22 +641,48 @@ function setAuto(on) {
 // 항목 이름은 25자 안쪽, 그 뒤에 : 가 와야 한다. 앞에 붙은 이모지·기호는 뗀다.
 const FIELD_RE = /^[^\p{L}\p{N}]*([\p{L}\p{N}][^:：\n]{0,24}?)\s*[:：]\s*(.*)$/u;
 const fkey = (name) => name.replace(/\s+/g, '').toLowerCase();
+// 한 줄에 "닉네임 : 앙또 / 시간대 : 낮" 처럼 여러 항목을 / 나 | 로 이어 쓴 경우.
+// '/' 뒤에 '항목 :' 모양이 오는 자리에서만 자른다 — "저녁/새벽" 같은 값 속의 / 는 안 자른다.
+const SPLIT_RE = /[\/|]\s*(?=[^\p{L}\p{N}]*[\p{L}\p{N}][^:：\/|\n]{0,24}?\s*[:：])/gu;
+function splitFields(line) {
+  const parts = [];
+  let last = 0, m;
+  while ((m = SPLIT_RE.exec(line))) {
+    if (m.index > last) parts.push(line.slice(last, m.index).trim());
+    last = m.index + m[0].length;
+  }
+  parts.push(line.slice(last).trim());
+  return parts.filter(Boolean);
+}
 function fieldsOf(text) {
   const out = [];
   let cur = null;
   for (const raw of String(text || '').split('\n')) {
     const line = raw.trim();
-    const m = line.match(FIELD_RE);
-    if (m && !/^https?$/i.test(m[1]) && !m[2].startsWith('//')) {
-      cur = { key: fkey(m[1]), name: m[1].trim(), value: m[2].trim() };
-      out.push(cur);
-    } else if (!line) {
-      cur = null;                         // 빈 줄이면 항목이 끝난 것
-    } else if (cur) {
-      cur.value = (cur.value ? cur.value + ' ' : '') + line;   // 값이 여러 줄이면 이어 붙인다
+    if (!line) { cur = null; continue; }        // 빈 줄이면 항목이 끝난 것
+    for (const seg of splitFields(line)) {
+      const m = seg.match(FIELD_RE);
+      if (m && !/^https?$/i.test(m[1]) && !m[2].startsWith('//')) {
+        cur = { key: fkey(m[1]), name: m[1].trim(), value: m[2].trim() };
+        out.push(cur);
+      } else if (cur) {
+        cur.value = (cur.value ? cur.value + ' ' : '') + seg;   // 값이 여러 줄이면 이어 붙인다
+      }
     }
   }
   return out;
+}
+// 항목 이름 없이 "앙또 / 낮 / 재밌어서 / 동의" 처럼 / 로만 나눠 쓴 사람. 조각 수가 다른
+// 사람들이 쓴 항목 수와 **딱 맞으면** 양식 순서대로 적은 것으로 보고 순서대로 넣는다.
+// 그렇게 맞춘 칸은 기울임으로 표시한다 — 기계가 짐작한 것이라는 뜻이다.
+function positional(text, keys) {
+  const t = String(text || '').trim();
+  if (!t || !keys.length || !t.includes('/')) return null;
+  const parts = t.split(/\s*\/\s*/).map(s => s.replace(/^[^\p{L}\p{N}]+/u, '').trim()).filter(Boolean);
+  if (parts.length !== keys.length) return null;
+  const v = { __pos: true };
+  keys.forEach((k, i) => { v[k] = parts[i]; });
+  return v;
 }
 // 이 글의 지원서들에 공통으로 나오는 항목. 셋 중 하나 이상(30%)이 쓴 항목만 칸으로 삼는다 —
 // 한두 사람만 쓴 항목까지 칸을 내면 표가 비어 보인다.
@@ -528,6 +713,7 @@ function formValues(c) {
   if (!v) {
     v = {};
     for (const f of fieldsOf(c.comment)) if (!(f.key in v)) v[f.key] = f.value;
+    if (!Object.keys(v).length) v = positional(c.comment, FORM.schema.keys) || v;
     FORM.vals.set(c.userId, v);
   }
   return v;
@@ -628,6 +814,47 @@ async function getJSON(url) {
 }
 
 // ─────────────────────────────────────────────────────────── 불러오기
+// 댓글을 끝까지 받아 사람별로 정리한다. load() 와 '지난 참가자' 가 같이 쓴다.
+// SOOP 이 말한 댓글 수(meta.total + 베스트 댓글 수)보다 적게 받았으면 한 번 더 받는다 —
+// 받는 사이 댓글이 달리거나 지워지면 페이지가 밀려 빠질 수 있다. 그래도 적으면 gap 으로 알린다.
+async function fetchPeople(bid, no) {
+  let all = [], said = null;
+  const once = async () => {
+    all = []; said = null;
+    let page = 1, last = 1;
+    do {
+      const d = await getJSON(API_COMMENT(bid, no, page));
+      all = all.concat((d.data || []).map(c =>
+        ({ ...c, comment: unent(c.comment), userNick: unent(c.userNick) })));
+      last = (d.meta && d.meta.lastPage) || 1;
+      if (d.meta && d.meta.total != null) said = (+d.meta.total || 0) + (+d.bestCount || 0);
+      page++;
+    } while (page <= last && page <= 60);   // 1,800개까지. 그 이상이면 끊는다.
+    // 같은 댓글이 두 번 오면 하나로 (페이지가 밀리면 생긴다)
+    const seen = new Set();
+    all = all.filter(c => {
+      const k = c.pCommentNo || (c.userId + '|' + c.regDate);
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+  };
+  await once();
+  if (said != null && all.length < said) await once();
+  const gap = (said != null && all.length < said) ? { got: all.length, said } : null;
+
+  // 한 사람이 여러 번 달았으면 **좋아요가 가장 많은 것**만 남긴다.
+  // 지원 글을 고쳐 쓰느라 두 번 다는 일이 흔하다.
+  const best = new Map();
+  for (const c of all) {
+    const cur = best.get(c.userId);
+    if (!cur || (c.likeCnt || 0) > (cur.likeCnt || 0)) best.set(c.userId, c);
+  }
+  const people = [...best.values()].sort((a, b) =>
+    (b.likeCnt || 0) - (a.likeCnt || 0) ||
+    String(a.regDate).localeCompare(String(b.regDate)));   // 같으면 먼저 쓴 사람이 위
+  return { people, gap };
+}
+
 async function load(bid, no, quiet) {
   if (LOADING) return;
   LOADING = true;
@@ -648,31 +875,13 @@ async function load(bid, no, quiet) {
       postWhy = e.message || '';
     }
 
-    // 댓글은 30개씩 나눠서 온다. 끝까지 넘긴다.
-    let all = [], page = 1, last = 1;
-    do {
-      const d = await getJSON(API_COMMENT(bid, no, page));
-      all = all.concat((d.data || []).map(c =>
-        ({ ...c, comment: unent(c.comment), userNick: unent(c.userNick) })));
-      last = (d.meta && d.meta.lastPage) || 1;
-      page++;
-    } while (page <= last && page <= 60);   // 1,800개까지. 그 이상이면 끊는다.
-
-    // 한 사람이 여러 번 달았으면 **좋아요가 가장 많은 것**만 남긴다.
-    // 지원 글을 고쳐 쓰느라 두 번 다는 일이 흔하다.
-    const best = new Map();
-    for (const c of all) {
-      const cur = best.get(c.userId);
-      if (!cur || (c.likeCnt || 0) > (cur.likeCnt || 0)) best.set(c.userId, c);
-    }
-    const people = [...best.values()].sort((a, b) =>
-      (b.likeCnt || 0) - (a.likeCnt || 0) ||
-      String(a.regDate).localeCompare(String(b.regDate)));   // 같으면 먼저 쓴 사람이 위
+    // 댓글은 30개씩 나눠서 온다. 끝까지 넘겨 사람별로 정리한다.
+    const { people, gap } = await fetchPeople(bid, no);
 
     // 전체 지원자 속 등수. 등락(▲▼)은 이걸로 센다.
     const rawRank = {};
     people.forEach((c, i) => { rawRank[c.userId] = i + 1; });
-    STATE = { bid, no, post, postWhy, people, rawRank, info: readPost(post),
+    STATE = { bid, no, post, postWhy, people, rawRank, gap, info: readPost(post),
               fans: STATE.fans || {}, when: new Date() };
     if (first) savePrev();          // 창이 갑자기 닫혀도 다음에 견줄 것은 남게
     // 글에 인원이 적혀 있으면 그걸 기본값으로. 단, 주소에 이미 인원이
@@ -686,6 +895,8 @@ async function load(bid, no, quiet) {
     refreshPin();
     paintShare();
     paintCut();
+    paintPrev();
+    if ((PP || PL.length) && ppKey() !== PPLOADED) applyPP();   // 지난 참가자는 한 번만 받는다
     fetchFans();
   } catch (e) {
     say('불러오지 못했습니다 — ' + e.message +
@@ -913,6 +1124,7 @@ function render() {
        ${PIN ? '' : `<div class="hint" style="margin-top:9px">글 제목과 본문은 못 읽었습니다${
          STATE.postWhy ? ' — <b>' + esc(STATE.postWhy) + '</b>' : ''}.
          <b>댓글은 읽히므로 순위는 아래에 그대로 나옵니다.</b></div>`}`;
+    gapBox();
     $('#listbox').style.display = '';
     paintList();
     return;
@@ -963,8 +1175,69 @@ function render() {
   }
 
 
+  gapBox();
   $('#listbox').style.display = '';
   paintList();
+}
+
+// SOOP 이 말한 댓글 수보다 적게 받았을 때. 조용히 넘어가면 사람이 빠진 줄도 모른다.
+function gapBox() {
+  if (!STATE.gap || PIN) return;
+  $('#post').insertAdjacentHTML('beforeend',
+    `<div class="readbox" style="margin-top:9px"><span class="warn">⚠ <b>SOOP 은 댓글이 ${fmt(STATE.gap.said)}개라는데
+     ${fmt(STATE.gap.got)}개만 받았습니다.</b></span> 불러오는 사이에 댓글이 달리거나 지워지면 이런 일이
+     생깁니다. 한 번 더 받아 봤는데도 그렇습니다. <button id="regap">다시 불러오기</button></div>`);
+  const b = $('#regap');
+  if (b) b.addEventListener('click', () => load(STATE.bid, STATE.no));
+}
+
+// ─────────────────────────────────────────────────────────── 지난 참가자 그리기·받기
+function paintPrev() {
+  const box = $('#prevbox');
+  const can = !PIN && (!RO || CANFREEZE) && STATE.people.length;
+  box.style.display = can ? '' : 'none';
+  if (!can) return;
+  const set = PP || PL.length;
+  const hit = STATE.people.filter(isPrev).length;
+  const last = lastOf(STATE.bid);
+  $('#ppinfo').innerHTML = set
+    ? `${PPINFO ? esc(PPINFO) + ' ' : ''}이번 신청자 중 <b>${fmt(hit)}명</b>이 지난 참가자입니다.${PX ? ' 순위에서 뺐습니다.' : ''}`
+    : (last && String(last.no) !== String(STATE.no) && last.n
+        ? `이 방송국에서 지난번에 마감한 글이 있습니다.
+           <button id="pplast" style="padding:3px 10px;font-size:11.5px">그 글의 위 ${fmt(last.n)}명을 지난 참가자로 쓰기</button>`
+        : '지난번 모집 글 주소를 넣으면 그 글의 위 N명을 지난 참가자로 봅니다. 닉네임·아이디를 직접 적어도 됩니다.');
+  if (PP) { $('#pp').value = `https://www.sooplive.com/station/${PP.bid}/post/${PP.no}`; if (PP.n) $('#ppn').value = PP.n; }
+  $('#pl').value = PL.join(', ');
+  $('#px').checked = PX;
+  $('#ppoff').style.display = set ? '' : 'none';
+  if (set) box.querySelector('details').open = true;
+  const lb = $('#pplast');
+  if (lb) lb.addEventListener('click', () => {
+    PP = { bid: STATE.bid, no: String(last.no), n: last.n };
+    syncUrl(); applyPP();
+  });
+}
+async function applyPP() {
+  PPLOADED = ppKey();
+  PREVSET = new Set(); PPINFO = '';
+  if (PP) {
+    PPINFO = '지난 글을 읽는 중…'; paintPrev();
+    try {
+      const { people } = await fetchPeople(PP.bid, PP.no);
+      let n = PP.n;
+      if (!n) {   // 인원을 안 적었으면 그 글에서 읽어 본다
+        try { n = readPost(await getJSON(API_POST(PP.bid, PP.no))).count || 0; } catch (e) { /* 글을 못 읽음 */ }
+      }
+      if (!n) n = people.length;
+      PP.n = n;
+      people.slice(0, n).forEach(c => PREVSET.add(c.userId));
+      PPINFO = `지난 글의 신청자 ${fmt(people.length)}명 중 위에서 ${fmt(n)}명을 지난 참가자로 봅니다.`;
+    } catch (e) { PPINFO = '지난 글을 불러오지 못했습니다 — ' + (e.message || ''); }
+  }
+  PREVNICK = new Set(PL.map(s => s.toLowerCase()));
+  PL.forEach(s => PREVSET.add(s));          // 아이디로 적었을 수도 있다
+  paintPrev();
+  if (STATE.people.length) { render(); paintSnap(); refreshPin(); paintShare(); }
 }
 
 // 관리자가 고른 것을 반영한 최종 줄 세우기.
@@ -976,6 +1249,9 @@ function ranked(opt) {
   // 팬클럽이 아닌 사람은 지원이 아니기 때문이다. 관리자가 확정한 사람은 남긴다.
   if (WHO && !(opt && opt.all))
     list = list.filter(c => hasBadge(c, WHO) || ADMIN.fix.has(c.userId));
+  // 지난 참가자 빼기. 역시 관리자가 확정한 사람은 남긴다.
+  if (PX && !(opt && opt.all))
+    list = list.filter(c => !isPrev(c) || ADMIN.fix.has(c.userId));
   if (SNAP) {
     // 마감 뒤에 달린 댓글은 지원으로 치지 않는다. 그리고 좋아요를 **마감 당시
     // 값으로 되돌려** 다시 세운다. 이걸 안 하면 마감은 이름뿐인 버튼이 된다.
@@ -1029,11 +1305,12 @@ function paintList() {
     });
     sel.value = WHO;
   }
-  const whoOut = WHO ? everyone.length - people.length : 0;
+  const out = everyone.length - people.length;
+  const why = [WHO ? whoLabel() + ' 아님' : '', PX ? '지난 참가자' : ''].filter(Boolean).join(', ');
 
   $('#count').textContent =
     `${fmt(people.length)}명` +
-    (WHO ? ` · ${whoLabel()} 아닌 ${fmt(whoOut)}명은 뺌` : '') +
+    (out && why ? ` · ${why} ${fmt(out)}명은 뺌` : '') +
     (CFG.show.checked
       ? (todo ? ` · 스트리머가 아직 안 본 것 ${fmt(todo)}명`
               : ' · 스트리머가 전부 확인함')
@@ -1091,9 +1368,10 @@ function paintList() {
           ${moveTag(c)}
           ${commentLink(c)}
           ${badgeChips(c)}
+          ${prevChip(c)}
           ${waitTag(people, n, i)}
           ${CFG.show.checked && !isChecked(c) ? '<span class="chip todo">아직 확인 안 함</span>' : ''}
-          ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+          ${isFix ? '<span class="chip fix">확정</span>' : ''}
           ${isPass(c, STATE.info) ? '<span class="chip pass" title="글의 프리패스 명단에 이 닉네임이 있습니다">프리패스?</span>' : ''}
           ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
         </div>
@@ -1173,6 +1451,7 @@ function paintSnap() {
     // '마감 시각' 과 '지금으로 마감' 이 같은 일인 줄 알기 쉽다. 다른 일이다.
     bar.innerHTML =
       `⏱ <b>지금은 좋아요가 바뀌면 순위도 따라 바뀝니다.</b>
+       ${afLine()}
        <details class="more" data-more="freeze">
        <summary>마감 시각 · 뽑을 인원 · 지금으로 마감 — 각각 뭘 하나요?</summary>
        <div style="margin-top:7px">
@@ -1199,7 +1478,7 @@ function paintSnap() {
                                     (c.likeCnt || 0) !== SNAP.likes[c.userId]).length;
   bar.style.display = '';
   bar.innerHTML =
-    `🔒 <b>${esc(SNAP.at.toLocaleString('ko-KR'))} 에 멈춘 순위</b>입니다.
+    `🔒 <b>${esc(SNAP.at.toLocaleString('ko-KR'))} 에 멈춘 순위</b>입니다.${AFAT ? ' <b>마감 시각이 되어 이 창이 스스로 멈췄습니다.</b>' : ''}
      그 뒤로 좋아요가 올라가도 이 순위는 안 움직입니다.<br>` +
     (after ? `멈춘 뒤에 올라온 신청 <b>${fmt(after)}개</b>는 뺐습니다. ` : '') +
     (moved ? `<b>${fmt(moved)}명</b>은 그 뒤로 좋아요가 늘었습니다. 옆에 <b>지금 ○</b> 로 적어 뒀습니다.`
@@ -1245,6 +1524,7 @@ function paintCut() {
   el.value = CUT ? cutValue(CUT)
                  : (el.value || cutValue((STATE.info || {}).deadline));
   $('#cutoff').style.display = CUT ? '' : 'none';
+  $('#af').checked = AF;
 }
 
 // 마감 시각이 무슨 일을 하는지, 그리고 **무슨 일을 못 하는지** 밝힌다.
@@ -1335,6 +1615,7 @@ function paintShare() {
     pb.disabled = true; pb.textContent = '만드는 중…';
     let msg = '복사하지 못했습니다';
     try {
+      rememberLast();
       const pin = pinPicked() || await makePin(wantText());
       let url = pin.url, short = false;
       if (SHORTEN) {
@@ -1423,8 +1704,7 @@ function cutRows(people, n, cols) {
   const prev = people[n - 1], c = people[n];
   if (prev && c && (prev.likeCnt || 0) === (c.likeCnt || 0)) {
     const same = people.filter(x => (x.likeCnt || 0) === (c.likeCnt || 0)).length;
-    h += `<tr><td colspan="${cols}" style="background:#2e2718;color:#e8cd88;
-      font-size:12px;padding:9px 10px">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등이
+    h += `<tr class="tierow"><td colspan="${cols}">⚠ <b>${fmt(n)}등과 ${fmt(n + 1)}등이
       ${fmt(c.likeCnt)}개로 같습니다</b> — 같은 점수가 ${fmt(same)}명이라
       여기서는 못 가립니다. 인원을 바꾸거나 직접 정하세요.</td></tr>`;
   }
@@ -1485,14 +1765,16 @@ function paintForm(people, n, hit) {
         <img loading="lazy" alt="" src="${esc(c.profileImage || '')}"
              onerror="this.style.visibility='hidden'">
         <b>${esc(c.userNick || '')}</b>
-        ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+        ${isFix ? '<span class="chip fix">확정</span>' : ''}
+        ${prevChip(c)}
         ${waitTag(people, n, i)}
       </div></td>
       <td class="r lk">${fmt(c.likeCnt)}${nowTag(c)}${likeDelta(c)}</td>
-      ${keys.map(k => `<td class="fv" title="${esc(v[k] || '')}">${esc((v[k] || '').slice(0, 80))}</td>`).join('')}
+      ${keys.map(k => `<td class="fv${v.__pos ? ' pos' : ''}" title="${esc(v[k] || '')}${v.__pos ? ' (이름 없이 / 로 나눠 써서 양식 순서대로 맞췄습니다)' : ''}">${esc((v[k] || '').slice(0, 80))}</td>`).join('')}
     </tr>`);
   });
-  const blank = people.filter(c => !Object.keys(formValues(c)).length).length;
+  const blank = people.filter(c => !Object.keys(formValues(c)).filter(k => k !== '__pos').length).length;
+  const posed = people.filter(c => formValues(c).__pos).length;
 
   $('#list').innerHTML = rows.length
     ? `<div class="tblwrap"><table class="tbl"><thead><tr>
@@ -1502,6 +1784,7 @@ function paintForm(people, n, hit) {
        </tr></thead><tbody>${rows.join('')}</tbody></table></div>
        ${cutNote(people, n) ? `<div class="cutnote">${cutNote(people, n)}</div>` : ''}
        <div class="hint">지원서에서 <b>항목 : 값</b> 모양을 읽어 칸으로 나눈 것입니다.
+         ${posed ? `이름 없이 <b>/</b> 로만 나눠 쓴 <b>${fmt(posed)}명</b>은 양식 순서대로 맞춰 넣고 <i>기울여</i> 표시했습니다. ` : ''}
          ${blank ? `양식대로 안 쓴 <b>${fmt(blank)}명</b>은 칸이 비어 있습니다. ` : ''}
          줄을 누르면 지원서 전문이 열립니다. 엑셀에도 같은 칸이 들어갑니다.</div>`
     : `<div class="empty">${people.length ? '찾는 사람이 없습니다.' : '이 글에는 아직 댓글이 없습니다.'}</div>`;
@@ -1535,9 +1818,10 @@ function paintTable(people, n, hit) {
         <img loading="lazy" alt="" src="${esc(c.profileImage || '')}"
              onerror="this.style.visibility='hidden'">
         <b>${esc(c.userNick || '')}</b>
-        ${isFix ? '<span class="chip" style="background:#1c2c44;color:#9dc0f0;border:1px solid #35558a">확정</span>' : ''}
+        ${isFix ? '<span class="chip fix">확정</span>' : ''}
         ${isPass(c, STATE.info) ? '<span class="chip pass" title="글의 프리패스 명단에 이 닉네임이 있습니다">프리패스?</span>' : ''}
         ${badgeChips(c)}
+        ${prevChip(c)}
         ${CFG.show.bestBadge ? `<span data-grade="${esc(c.userId)}"></span>` : ''}
         ${waitTag(people, n, i)}
       </div></td>
@@ -1606,6 +1890,7 @@ function openDetail(userId) {
             ? '<span class="chip done">스트리머가 확인함</span>'
             : '<span class="chip todo">아직 확인 안 함</span>'}
           ${badgeChips(c)}
+          ${prevChip(c)}
           ${CFG.show.joined ? `<span data-join="${esc(c.userId)}" data-at="${esc(c.regDate || '')}" data-only="new"></span>` : ''}
           <span data-grade="${esc(c.userId)}"></span>
         </div>
@@ -1663,6 +1948,10 @@ function syncUrl() {
     if (CANFREEZE && WHO) v.searchParams.set('who', WHO);
     else v.searchParams.delete('who');
     if (AUTO) v.searchParams.set('auto', '1'); else v.searchParams.delete('auto');
+    if (CANFREEZE && AF) v.searchParams.set('af', '1'); else v.searchParams.delete('af');
+    if (CANFREEZE && PP) v.searchParams.set('pp', `${PP.bid}/${PP.no}/${PP.n || 0}`); else v.searchParams.delete('pp');
+    if (CANFREEZE && PL.length) v.searchParams.set('pl', PL.join(',')); else v.searchParams.delete('pl');
+    if (CANFREEZE && PX) v.searchParams.set('px', '1'); else v.searchParams.delete('px');
     history.replaceState(null, '', v);
     return;
   }
@@ -1683,6 +1972,10 @@ function syncUrl() {
   else u.searchParams.delete('cut');
   if (WHO) u.searchParams.set('who', WHO); else u.searchParams.delete('who');
   if (AUTO) u.searchParams.set('auto', '1'); else u.searchParams.delete('auto');
+  if (AF) u.searchParams.set('af', '1'); else u.searchParams.delete('af');
+  if (PP) u.searchParams.set('pp', `${PP.bid}/${PP.no}/${PP.n || 0}`); else u.searchParams.delete('pp');
+  if (PL.length) u.searchParams.set('pl', PL.join(',')); else u.searchParams.delete('pl');
+  if (PX) u.searchParams.set('px', '1'); else u.searchParams.delete('px');
   history.replaceState(null, '', u);
 }
 
@@ -1765,8 +2058,8 @@ function sheetData() {
   if (hasNow) { head.push('지금 좋아요'); width.push(11); }
   if (CFG.show.followers) { head.push('팔로워'); width.push(9); }
   if (CFG.show.joined) { head.push('방송국 가입일'); width.push(13); }
-  head.push('뱃지', '스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소', '댓글 주소');
-  width.push(14, 12, 12, 6, 18, 60, 34, 34, 44);
+  head.push('뱃지', '지난 참가', '스트리머 확인', '등급', '확정', '댓글 시각', '지원서', '사진 주소', '방송국 주소', '댓글 주소');
+  width.push(14, 9, 12, 12, 6, 18, 60, 34, 34, 44);
   const applyCol = head.indexOf('지원서');
   // 지원서에서 읽어낸 항목은 맨 뒤에 칸을 하나씩. 이름 앞에 '항목:' 을 붙여
   // 원래 칸(닉네임 등)과 헷갈리지 않게 한다.
@@ -1782,6 +2075,7 @@ function sheetData() {
     if (CFG.show.followers) r.push(f.fan == null ? '' : f.fan);
     if (CFG.show.joined) r.push(f.join || '');
     r.push(badgeText(c),
+           isPrev(c) ? 'O' : '',
            isChecked(c) ? 'O' : '',
            [f.partner ? '파트너 BJ' : '', f.best ? '베스트 BJ' : ''].filter(Boolean).join(' '),
            ADMIN.fix.has(c.userId) ? 'O' : '',
@@ -1958,6 +2252,7 @@ async function makePin(withText) {
       const bb = badgeBits(c);
       if (bb) r.b = bb;
       if (c.pCommentNo) r.n = c.pCommentNo;
+      if (isPrev(c)) r.pv = 1;
       if (isChecked(c)) r.c = 1;
       if (c.regDate) r.d = c.regDate;
       if (withText && c.comment) r.t = c.comment;
@@ -1999,7 +2294,7 @@ function usePin(o) {
     return {
       userId: r.i, userNick: r.k || '', likeCnt: r.l || 0,
       nowCnt: r.w == null ? null : r.w, bjlike: r.c ? 1 : 0,
-      badge: badgeFromBits(r.b || 0), pCommentNo: r.n || 0,
+      badge: badgeFromBits(r.b || 0), pCommentNo: r.n || 0, prev: !!r.pv,
       regDate: r.d || '', comment: r.t || '',
       photo: r.h ? { url: r.h[0] === '=' ? r.h.slice(1) : SHOT + r.h } : null,
       profileImage: r.a || PROFILE(r.i),
@@ -2057,6 +2352,10 @@ async function shortenView(canFreeze) {
   if (VIEW === 'card') body.w = 1;
   else if (VIEW === 'form') body.w = 2;
   if (WHO) body.q = WHO;
+  if (AF) body.a = 1;
+  if (PP) body.pp = `${PP.bid}/${PP.no}/${PP.n || 0}`;
+  if (PL.length) body.pl = PL;
+  if (PX) body.px = 1;
   return location.origin + '/v/' + await keep(JSON.stringify(body));
 }
 
@@ -2113,6 +2412,8 @@ $('#freeze').addEventListener('click', () => {
     if (!confirm('이미 마감했습니다. 지금 값으로 다시 마감할까요?')) return;
   }
   SNAP = readSnap(makeSnap(STATE.people));
+  AFAT = null;
+  rememberLast();
   syncUrl(); render(); paintSnap(); paintAdmin(); refreshPin(); paintShare();
 });
 $('#todo').addEventListener('click', () => {
@@ -2123,6 +2424,34 @@ $('#vtable').addEventListener('click', () => setView('table'));
 $('#vcard').addEventListener('click', () => setView('card'));
 $('#vform').addEventListener('click', () => setView('form'));
 $('#auto').addEventListener('click', () => setAuto(!AUTO));
+$('#af').addEventListener('change', () => {
+  AF = $('#af').checked;
+  AFDONE = false;
+  syncUrl(); paintSnap();
+});
+$('#ppgo').addEventListener('click', () => {
+  const t = parsePost($('#pp').value);
+  if (!t) { $('#ppinfo').innerHTML = '<span class="warn">글 주소를 알아보지 못했습니다. www.sooplive.com/station/아이디/post/번호 모양이어야 합니다.</span>'; return; }
+  PP = { bid: t.bid, no: t.no, n: Math.max(0, parseInt($('#ppn').value, 10) || 0) };
+  syncUrl(); applyPP();
+});
+$('#pp').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#ppgo').click(); });
+$('#plgo').addEventListener('click', () => {
+  PL = $('#pl').value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  syncUrl(); applyPP();
+});
+$('#pl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#plgo').click(); });
+$('#ppoff').addEventListener('click', () => {
+  PP = null; PL = []; PX = false; PREVSET = new Set(); PREVNICK = new Set(); PPINFO = ''; PPLOADED = '';
+  $('#pp').value = ''; $('#ppn').value = ''; $('#pl').value = '';
+  syncUrl(); paintPrev();
+  if (STATE.people.length) { render(); paintSnap(); refreshPin(); paintShare(); }
+});
+$('#px').addEventListener('change', () => {
+  PX = $('#px').checked;
+  syncUrl(); paintPrev();
+  if (STATE.people.length) { render(); paintSnap(); refreshPin(); paintShare(); }
+});
 $('#selclear').addEventListener('click', () => {
   SEL.clear();
   document.querySelectorAll('input.pick').forEach(b => { b.checked = false; });
@@ -2156,6 +2485,7 @@ $('#cut').addEventListener('change', () => {
   const v = $('#cut').value;
   const d = v ? new Date(v) : null;
   CUT = (d && !isNaN(d)) ? d : null;
+  AFDONE = false;                 // 시각을 바꿨으니 자동 마감도 다시 기다린다
   if (STATE.people.length) { render(); paintSnap(); paintAdmin(); refreshPin(); paintShare(); }
   paintCut(); syncUrl();
 });
@@ -2204,7 +2534,8 @@ $('#copy').addEventListener('click', () => {
 function applyConfig() {
   if (CFG.pageTitle) document.title = CFG.pageTitle;
   document.querySelector('h1').innerHTML =
-    '<span class="d"></span>' + esc(CFG.title);
+    '<span class="d"></span>' + esc(CFG.title) +
+    '<button id="theme" class="themebtn" title="밝은 화면으로">☀</button>';
   if (CFG.subtitle) document.querySelector('.sub').innerHTML = CFG.subtitle;
   const c = CFG.colors || {};
   const map = { bg: '--bg', panel: '--panel', accent: '--acc',
@@ -2332,6 +2663,8 @@ function applyReadOnly() {
 // 주소에 게시글이 들어 있으면 바로 연다 (남에게 링크를 줬을 때)
 (async function boot() {
   applyConfig();
+  bindTheme();
+  hookMore($('#prevbox'));
   const q = new URLSearchParams(location.search);
 
   // ① 주소에 있는 값을 **먼저** 전부 읽어 넣는다
@@ -2341,6 +2674,10 @@ function applyReadOnly() {
   if (q.get('snap')) SNAP = readSnap(q.get('snap'));
   if (+q.get('cut') > 0) CUT = new Date(+q.get('cut') * 1000);
   setWho(q.get('who'));
+  AF = q.get('af') === '1';
+  parsePP(q.get('pp'));
+  PL = (q.get('pl') || '').split(',').map(s => s.trim()).filter(Boolean);
+  PX = q.get('px') === '1';
   ADMIN.on = q.get('admin') === '1';
   // 고정 주소는 두 가지. 짧은 주소 '/p/<이름표>' 와, 통째로 담은 '#pin='.
   // 예전에 만든 '?pin=' 주소도 계속 받아 준다.
@@ -2369,6 +2706,15 @@ function applyReadOnly() {
         if (+q.get('cut') > 0) CUT = new Date(+q.get('cut') * 1000);
         if (o.q) setWho(o.q);
         if (q.get('who')) setWho(q.get('who'));
+        if (o.a) AF = true;
+        if (o.pp) parsePP(o.pp);
+        if (Array.isArray(o.pl)) PL = o.pl.map(String);
+        if (o.px) PX = true;
+        if (q.get('af')) AF = q.get('af') === '1';
+        if (q.get('pp')) parsePP(q.get('pp'));
+        if (q.get('pl')) PL = q.get('pl').split(',').map(s => s.trim()).filter(Boolean);
+        if (q.get('px')) PX = q.get('px') === '1';
+        AFDONE = !!(CUT && CUT <= Date.now());   // 이미 지난 시각이면 자동 마감은 안 한다
         // 스트리머가 여기서 직접 바꾼 것이 주소에 남아 있으면 그쪽이 우선이다.
         const qn = parseInt(q.get('n'), 10);
         if (qn > 0) $('#n').value = qn;
@@ -2414,6 +2760,7 @@ function applyReadOnly() {
   setView(VIEW);
   paintAdmin();
   if (q.get('auto') === '1') setAuto(true);
+  AFDONE = !!(CUT && CUT <= Date.now());   // 이미 지난 시각이면 자동 마감은 안 한다
 
   const post = q.get('post') || CFG.defaultPostUrl;
   if (post) {
